@@ -2,27 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morse_comms/features/settings/bloc/settings_cubit.dart';
-import 'package:morse_comms/features/settings/bloc/settings_state.dart';
 import 'package:morse_comms/features/settings/data/settings_repository.dart';
 import 'package:morse_comms/features/settings/ui/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<SettingsCubit> _makeSettingsCubit([Map<String, Object> prefs = const {}]) async {
+Future<SettingsCubit> _makeSettingsCubit(
+    [Map<String, Object> prefs = const {}]) async {
   SharedPreferences.setMockInitialValues(prefs);
   final sp = await SharedPreferences.getInstance();
   return SettingsCubit(SettingsRepository(sp));
-}
-
-class _FakeSettingsCubit extends SettingsCubit {
-  _FakeSettingsCubit(SettingsRepository repo) : super(repo);
-
-  @override
-  Future<void> loadSttLocales() async {
-    emit(state.copyWith(sttLocales: const [
-      SttLocale(id: 'en_US', name: 'English (US)'),
-      SttLocale(id: 'de_DE', name: 'German'),
-    ]));
-  }
 }
 
 Widget _buildTestApp(SettingsCubit cubit) {
@@ -96,7 +84,5 @@ void main() {
 
     expect(cubit.state.sideTone, isTrue);
   });
-
 }
-
 

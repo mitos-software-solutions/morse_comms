@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morse_comms/core/morse/morse_encoder.dart';
-import 'package:morse_comms/features/encoder/bloc/encoder_bloc.dart';
 import 'package:morse_comms/features/encoder/ui/encoder_screen.dart';
 import 'package:morse_comms/features/player/player_service.dart';
 import 'package:morse_comms/features/settings/bloc/settings_cubit.dart';

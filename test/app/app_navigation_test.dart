@@ -35,9 +35,6 @@ class _FakeLessonRepository implements LessonRepository {
   int get farnsworthLevelIndex => 0;
 
   @override
-  set farnsworthLevelIndex(int _) {}
-
-  @override
   double? bestAccuracy(int level) => 0.9;
 
   @override
