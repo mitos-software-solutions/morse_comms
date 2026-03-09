@@ -8,6 +8,7 @@
 Prepper-focused Morse code app — fully offline, free, useful for survival and learning.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for design decisions.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up your dev environment and submit changes.
+See [TESTING.md](TESTING.md) for the testing strategy and test layers.
 
 
 ## Build APK
