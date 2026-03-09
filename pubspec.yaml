@@ -1,0 +1,81 @@
+name: morse_comms
+description: "Prepper-focused Morse code app — fully offline, free, useful for survival and learning."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_bloc: ^9.0.0
+
+  # Dependency injection
+  get_it: ^8.0.0
+  injectable: ^2.5.0
+
+  # Audio playback (low-latency beep generation)
+  flutter_soloud: ^3.0.0
+
+  # Audio recording (mic access)
+  record: ^6.0.0
+
+  # Speech-to-text (offline, Android on-device)
+  speech_to_text: ^7.0.0
+
+  # Navigation
+  go_router: ^14.0.0
+
+  # File system paths (for WAV save)
+  path_provider: ^2.1.0
+
+  # Settings persistence
+  shared_preferences: ^2.3.0
+
+  # Share / export files via Android share sheet (kept for re-share only)
+  share_plus: ^10.0.0
+
+  # File picker (open WAV files for analysis)
+  file_selector: ^1.0.0
+
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # DI code generation
+  injectable_generator: ^2.7.0
+  build_runner: ^2.4.0
+
+  # App icon generation
+  flutter_launcher_icons: ^0.14.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/Morse_Comms_icon.png"
+  web:
+    generate: true
+    image_path: "assets/icon/Morse_Comms_icon.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/Morse_Comms_icon.png"
+  macos:
+    generate: true
+    image_path: "icons.png"
+  linux:
+    generate: true
+    image_path: "icons.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/examples/sos_20wpm.wav
+    - assets/examples/paris_20wpm.wav
+    - assets/examples/alphabet_20wpm.wav

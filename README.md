@@ -1,0 +1,67 @@
+# morse_comms
+
+![Tests](https://img.shields.io/badge/tests-309%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-79%25-yellow)
+![Platform](https://img.shields.io/badge/platform-Android-blue)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
+Prepper-focused Morse code app — fully offline, free, useful for survival and learning.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for design decisions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up your dev environment and submit changes.
+
+
+## Build APK
+
+**Debug APK (fast, no signing needed):**
+```bash
+flutter build apk --debug
+# Output: build/app/outputs/flutter-apk/app-debug.apk
+```
+
+**Release APK (optimised, requires signing config or use --no-shrink for testing):**
+```bash
+flutter build apk --release
+# Output: build/app/outputs/flutter-apk/app-release.apk
+```
+
+**Install to connected device/emulator after build:**
+```bash
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell am start -n com.example.morse_comms/.MainActivity
+```
+
+## Testing the app
+
+Run the Flutter test suite:
+```bash
+flutter test
+```
+
+## Running on Android emulator
+
+**Full dev mode (hot reload):**
+```bash
+flutter run -d emulator-5554
+```
+
+**Quick relaunch (APK already installed):**
+```bash
+adb shell am start -n com.example.morse_comms/.MainActivity
+```
+
+**Install + launch from built APK:**
+```bash
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell am start -n com.example.morse_comms/.MainActivity
+```
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on setup, coding style, testing, and opening pull requests.
+
+## Build notes
+
+- `record: ^6.0.0` required (5.x ships incompatible `record_linux`)
+- First build takes ~3 min (CMake + NDK download for `flutter_soloud` native layer)
+- Subsequent builds are fast (~10s Gradle incremental)
+- If build fails with SDK `.temp` directory error: delete `%LOCALAPPDATA%\Android\Sdk\.temp\` and retry
