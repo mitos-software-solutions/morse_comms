@@ -1,7 +1,7 @@
 # morse_comms
 
-![Tests](https://img.shields.io/badge/tests-309%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-79%25-yellow)
+[![Tests](https://github.com/mitos-software-solutions/morse_comms/actions/workflows/test.yml/badge.svg)](https://github.com/mitos-software-solutions/morse_comms/actions/workflows/test.yml)
+[![Coverage](https://codecov.io/gh/mitos-software-solutions/morse_comms/branch/main/graph/badge.svg)](https://app.codecov.io/gh/mitos-software-solutions/morse_comms)
 ![Platform](https://img.shields.io/badge/platform-Android-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
