@@ -1,15 +1,17 @@
 """
 Generate synthetic Morse code WAV files for testing the Morse Comms decoder.
 
-Each WAV is a pure sine wave shaped by ITU-R Morse timing, written as
-16-bit mono PCM at 44100 Hz — the same format the app records and expects.
+Mono: pure sine wave, 16-bit PCM at 44100 Hz.
+Stereo: same signal interleaved in L/R channels (or L-only / R-only variants),
+        optionally at 48000 Hz to simulate YouTube / real-device recordings.
 
 Supports additive white Gaussian noise at a specified SNR (dB).
 
 Usage:
     python scripts/generate_test_wavs.py
 
-Output: scripts/test_wavs/*.wav
+Output: scripts/test_wavs/script_generated_wavs/*.wav
+        scripts/test_wavs/script_generated_wavs/stereo_*.wav
 """
 
 import math
@@ -38,18 +40,20 @@ MORSE_TABLE = {
 
 # ── Audio helpers ─────────────────────────────────────────────────────────────
 
-def dot_samples(wpm: int) -> int:
+def dot_samples(wpm: int, sample_rate: int = SAMPLE_RATE) -> int:
     """Samples per dot unit at the given WPM (1200/wpm ms x sample rate)."""
-    return round(SAMPLE_RATE * 1200 / (wpm * 1000))
+    return round(sample_rate * 1200 / (wpm * 1000))
 
 
-def build_events(message: str, wpm: int) -> list[tuple[bool, int]]:
+def build_events(message: str, wpm: int, sample_rate: int = SAMPLE_RATE) -> list[tuple[bool, int]]:
     """Return a list of (tone_on, num_samples) segments for the message."""
-    dot = dot_samples(wpm)
+    dot = dot_samples(wpm, sample_rate)
     events: list[tuple[bool, int]] = []
 
     # Silent lead-in: 110 frames -- gives the OfflineAnalyzer plenty of noise floor data.
-    events.append((False, 110 * FRAME_SIZE))
+    # Scale frame count so lead-in duration stays ~1.3 s regardless of sample rate.
+    lead_in_frames = round(110 * sample_rate / SAMPLE_RATE)
+    events.append((False, lead_in_frames * FRAME_SIZE))
 
     words = message.upper().strip().split()
     for wi, word in enumerate(words):
@@ -68,7 +72,8 @@ def build_events(message: str, wpm: int) -> list[tuple[bool, int]]:
             events.append((False, dot * 7))              # inter-word gap
 
     # Trailing silence: 20 frames -- triggers final debounce.
-    events.append((False, 20 * FRAME_SIZE))
+    trail_frames = round(20 * sample_rate / SAMPLE_RATE)
+    events.append((False, trail_frames * FRAME_SIZE))
     return events
 
 
@@ -87,8 +92,9 @@ def render_pcm(
     freq_hz: float = FREQUENCY_HZ,
     snr_db: float | None = None,
     seed: int = 42,
+    sample_rate: int = SAMPLE_RATE,
 ) -> bytes:
-    """Render event list to 16-bit signed PCM bytes (little-endian)."""
+    """Render event list to 16-bit signed mono PCM bytes (little-endian)."""
     rng = random.Random(seed)
     # noise_sigma: sigma = A / sqrt(2 * 10^(SNR/10))
     noise_sigma = (
@@ -102,7 +108,7 @@ def render_pcm(
     for tone_on, count in events:
         for i in range(count):
             s = (
-                AMPLITUDE * math.sin(2 * math.pi * freq_hz * (offset + i) / SAMPLE_RATE)
+                AMPLITUDE * math.sin(2 * math.pi * freq_hz * (offset + i) / sample_rate)
                 if tone_on
                 else 0.0
             )
@@ -113,10 +119,48 @@ def render_pcm(
     return struct.pack(f'<{len(samples)}h', *samples)
 
 
-def build_wav(pcm_bytes: bytes) -> bytes:
-    """Wrap PCM bytes in a standard 44-byte WAV header."""
+def render_pcm_stereo(
+    events: list[tuple[bool, int]],
+    freq_hz: float = FREQUENCY_HZ,
+    snr_db: float | None = None,
+    seed: int = 42,
+    sample_rate: int = SAMPLE_RATE,
+    left_signal: bool = True,
+    right_signal: bool = True,
+) -> bytes:
+    """Render event list to 16-bit interleaved stereo PCM bytes (little-endian).
+
+    left_signal / right_signal control which channels carry the Morse tone.
+    Each channel also gets independent noise when snr_db is set.
+    """
+    rng = random.Random(seed)
+    noise_sigma = (
+        AMPLITUDE / math.sqrt(2.0 * 10.0 ** (snr_db / 10.0))
+        if snr_db is not None
+        else 0.0
+    )
+
+    samples: list[int] = []
+    offset = 0
+    for tone_on, count in events:
+        for i in range(count):
+            s = (
+                AMPLITUDE * math.sin(2 * math.pi * freq_hz * (offset + i) / sample_rate)
+                if tone_on
+                else 0.0
+            )
+            left  = (s if left_signal  else 0.0) + (noise_sigma * _gauss(rng) if noise_sigma > 0 else 0.0)
+            right = (s if right_signal else 0.0) + (noise_sigma * _gauss(rng) if noise_sigma > 0 else 0.0)
+            samples.append(max(-32768, min(32767, round(left))))
+            samples.append(max(-32768, min(32767, round(right))))
+        offset += count
+    return struct.pack(f'<{len(samples)}h', *samples)
+
+
+def build_wav(pcm_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> bytes:
+    """Wrap mono PCM bytes in a standard 44-byte WAV header."""
     data_len  = len(pcm_bytes)
-    byte_rate = SAMPLE_RATE * 2      # 16-bit mono
+    byte_rate = sample_rate * 2      # 16-bit mono
     header = struct.pack(
         '<4sI4s4sIHHIIHH4sI',
         b'RIFF', 36 + data_len,
@@ -124,9 +168,29 @@ def build_wav(pcm_bytes: bytes) -> bytes:
         b'fmt ', 16,
         1,           # PCM
         1,           # mono
-        SAMPLE_RATE,
+        sample_rate,
         byte_rate,
-        2,           # block align
+        2,           # block align (1 ch * 2 bytes)
+        16,          # bits per sample
+        b'data', data_len,
+    )
+    return header + pcm_bytes
+
+
+def build_wav_stereo(pcm_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> bytes:
+    """Wrap interleaved stereo PCM bytes in a standard 44-byte WAV header."""
+    data_len  = len(pcm_bytes)
+    byte_rate = sample_rate * 2 * 2  # 16-bit stereo
+    header = struct.pack(
+        '<4sI4s4sIHHIIHH4sI',
+        b'RIFF', 36 + data_len,
+        b'WAVE',
+        b'fmt ', 16,
+        1,           # PCM
+        2,           # stereo
+        sample_rate,
+        byte_rate,
+        4,           # block align (2 ch * 2 bytes)
         16,          # bits per sample
         b'data', data_len,
     )
@@ -149,6 +213,32 @@ def write_wav(
     with open(path, 'wb') as f:
         f.write(wav)
     print(f'  {os.path.basename(path):50s}  {len(wav)//1024:5d} KB  {total_s:.1f} s  [{snr_str}]')
+
+
+def write_wav_stereo(
+    path: str,
+    message: str,
+    wpm: int,
+    snr_db: float | None = None,
+    freq_hz: float = FREQUENCY_HZ,
+    seed: int = 42,
+    sample_rate: int = SAMPLE_RATE,
+    left_signal: bool = True,
+    right_signal: bool = True,
+) -> None:
+    events  = build_events(message, wpm, sample_rate)
+    pcm     = render_pcm_stereo(
+                events, freq_hz=freq_hz, snr_db=snr_db, seed=seed,
+                sample_rate=sample_rate, left_signal=left_signal,
+                right_signal=right_signal)
+    wav     = build_wav_stereo(pcm, sample_rate=sample_rate)
+    total_s = sum(n for _, n in events) / sample_rate
+    snr_str = f'{snr_db:.0f}dB' if snr_db is not None else 'clean'
+    ch_str  = 'L+R' if (left_signal and right_signal) else ('L' if left_signal else 'R')
+    with open(path, 'wb') as f:
+        f.write(wav)
+    print(f'  {os.path.basename(path):50s}  {len(wav)//1024:5d} KB  {total_s:.1f} s'
+          f'  [stereo {ch_str} {sample_rate}Hz {snr_str}]')
 
 
 # ── Test cases ────────────────────────────────────────────────────────────────
@@ -229,26 +319,85 @@ LIMIT_CASES: list[tuple[str, str, int, float | None, float]] = [
     ('ttttt_40wpm',       'TTTTT',       40,  None, 700.0),
 ]
 
+# ── Stereo test cases ─────────────────────────────────────────────────────────
+#
+# Format: (filename_stem, message, wpm, snr_db, freq_hz, sample_rate,
+#           left_signal, right_signal)
+#
+#   Both channels (L+R): standard stereo — downmix returns original signal.
+#   Left-only (L):       right channel silent — downmix halves amplitude.
+#   Right-only (R):      left channel silent — downmix halves amplitude.
+#   48 kHz sample rate:  mirrors YouTube / device recordings.
+
+STEREO_CASES: list[tuple[str, str, int, float | None, float, int, bool, bool]] = [
+    # ── Clean stereo, 44100 Hz — baseline WPM sweep ─────────────────────────
+    ('stereo_sos_10wpm',         'SOS',         10,  None, 700.0, 44100, True,  True),
+    ('stereo_sos_15wpm',         'SOS',         15,  None, 700.0, 44100, True,  True),
+    ('stereo_sos_20wpm',         'SOS',         20,  None, 700.0, 44100, True,  True),
+    ('stereo_sos_25wpm',         'SOS',         25,  None, 700.0, 44100, True,  True),
+    ('stereo_sos_30wpm',         'SOS',         30,  None, 700.0, 44100, True,  True),
+    ('stereo_paris_20wpm',       'PARIS',       20,  None, 700.0, 44100, True,  True),
+    ('stereo_hello_world_15wpm', 'HELLO WORLD', 15,  None, 700.0, 44100, True,  True),
+    ('stereo_cq_cq_20wpm',       'CQ CQ',       20,  None, 700.0, 44100, True,  True),
+
+    # ── Non-standard tone frequencies, stereo ───────────────────────────────
+    ('stereo_sos_20wpm_600hz',   'SOS',         20,  None, 600.0, 44100, True,  True),
+    ('stereo_sos_20wpm_800hz',   'SOS',         20,  None, 800.0, 44100, True,  True),
+    ('stereo_paris_20wpm_600hz', 'PARIS',       20,  None, 600.0, 44100, True,  True),
+
+    # ── Noise stereo ─────────────────────────────────────────────────────────
+    ('stereo_sos_20wpm_20db',    'SOS',         20, 20.0,  700.0, 44100, True,  True),
+    ('stereo_sos_20wpm_10db',    'SOS',         20, 10.0,  700.0, 44100, True,  True),
+    ('stereo_paris_20wpm_20db',  'PARIS',       20, 20.0,  700.0, 44100, True,  True),
+    ('stereo_sos_30wpm_20db',    'SOS',         30, 20.0,  700.0, 44100, True,  True),
+
+    # ── 48 kHz stereo (YouTube / Android recording format) ──────────────────
+    ('stereo_sos_20wpm_48k',     'SOS',         20,  None, 700.0, 48000, True,  True),
+    ('stereo_sos_10wpm_48k',     'SOS',         10,  None, 700.0, 48000, True,  True),
+    ('stereo_sos_30wpm_48k',     'SOS',         30,  None, 700.0, 48000, True,  True),
+    ('stereo_paris_20wpm_48k',   'PARIS',       20,  None, 700.0, 48000, True,  True),
+    ('stereo_hello_world_48k',   'HELLO WORLD', 20,  None, 700.0, 48000, True,  True),
+    ('stereo_sos_20wpm_48k_20db','SOS',         20, 20.0,  700.0, 48000, True,  True),
+
+    # ── Asymmetric channel: signal in LEFT only ──────────────────────────────
+    ('stereo_sos_20wpm_left',    'SOS',         20,  None, 700.0, 44100, True,  False),
+    ('stereo_paris_20wpm_left',  'PARIS',       20,  None, 700.0, 44100, True,  False),
+    ('stereo_sos_20wpm_48k_left','SOS',         20,  None, 700.0, 48000, True,  False),
+
+    # ── Asymmetric channel: signal in RIGHT only ─────────────────────────────
+    ('stereo_sos_20wpm_right',   'SOS',         20,  None, 700.0, 44100, False, True),
+    ('stereo_paris_20wpm_right', 'PARIS',       20,  None, 700.0, 44100, False, True),
+    ('stereo_sos_20wpm_48k_right','SOS',        20,  None, 700.0, 48000, False, True),
+]
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    out_dir = os.path.join(os.path.dirname(__file__), 'test_wavs')
+    out_dir = os.path.join(os.path.dirname(__file__), 'test_wavs', 'script_generated_wavs')
     os.makedirs(out_dir, exist_ok=True)
 
-    all_cases = BASELINE_CASES + LIMIT_CASES
-    print(f'Generating {len(all_cases)} WAV files -> {out_dir}/\n')
-    print(f'  {"File":<50}  {"Size":>5}     Duration  [Noise]')
-    print(f'  {"-"*50}  -----  --------  -------')
+    all_mono = BASELINE_CASES + LIMIT_CASES
+    print(f'Generating {len(all_mono)} mono + {len(STEREO_CASES)} stereo WAV files -> {out_dir}/\n')
+    print(f'  {"File":<50}  {"Size":>5}     Duration  [Info]')
+    print(f'  {"-"*50}  -----  --------  ------')
 
-    print('\n  -- Baseline cases --')
+    print('\n  -- Mono baseline cases --')
     for stem, message, wpm, snr_db, freq_hz in BASELINE_CASES:
         path = os.path.join(out_dir, f'{stem}.wav')
         write_wav(path, message, wpm, snr_db=snr_db, freq_hz=freq_hz)
 
-    print('\n  -- Limit-discovery cases --')
+    print('\n  -- Mono limit-discovery cases --')
     for stem, message, wpm, snr_db, freq_hz in LIMIT_CASES:
         path = os.path.join(out_dir, f'{stem}.wav')
         write_wav(path, message, wpm, snr_db=snr_db, freq_hz=freq_hz)
 
-    print(f'\nDone ({len(all_cases)} files). Push to device/emulator:')
+    print('\n  -- Stereo cases --')
+    for stem, message, wpm, snr_db, freq_hz, sr, left, right in STEREO_CASES:
+        path = os.path.join(out_dir, f'{stem}.wav')
+        write_wav_stereo(path, message, wpm, snr_db=snr_db, freq_hz=freq_hz,
+                         sample_rate=sr, left_signal=left, right_signal=right)
+
+    total = len(all_mono) + len(STEREO_CASES)
+    print(f'\nDone ({total} files). Push to device/emulator:')
     print(f'  adb push {out_dir}/ /sdcard/Download/')

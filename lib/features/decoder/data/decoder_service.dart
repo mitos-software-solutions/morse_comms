@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -96,13 +95,25 @@ class DecoderService {
     return _magnitudes.length;
   }
 
-  /// Decode the recorded magnitudes offline on a background isolate.
+  /// Decode the recorded audio offline on a background isolate.
   ///
   /// Call after [stopListening]. Returns the decoded Morse text.
+  ///
+  /// Routes through [OfflineAnalyzer.analyzeWav] so the live recording path
+  /// benefits from tone-frequency auto-detection (same as the file-open path).
   Future<String> analyzeRecording() {
-    final mags = List<double>.from(_magnitudes);
-    final dur = _detector.frameDurationMs;
-    return compute(runOfflineAnalysisIsolate, (mags, dur));
+    final wavBytes = buildRecordingWav();
+    // 44 bytes = WAV header with no audio data.
+    if (wavBytes.length <= 44) return Future.value('');
+    return compute(runOfflineWavAnalysisIsolate, (wavBytes, null));
+  }
+
+  /// Build a WAV from the current recording buffer and return the raw bytes.
+  ///
+  /// Returns an empty [Uint8List] if nothing has been recorded yet.
+  Uint8List buildRecordingWav() {
+    if (_pcmBytes.isEmpty) return Uint8List(0);
+    return _buildWav(Uint8List.fromList(_pcmBytes));
   }
 
   /// Write the recorded audio as a 16-bit mono PCM WAV to the temp directory
@@ -132,28 +143,15 @@ class DecoderService {
 
   /// Decode Morse from a WAV file's raw bytes.
   ///
-  /// Parses the WAV header, extracts PCM samples, runs Goertzel on each frame,
-  /// then runs the offline analyzer on a background isolate.
+  /// Delegates all parsing (mono/stereo, any sample rate) and analysis to
+  /// [OfflineAnalyzer.analyzeWav] running on a background isolate.
+  /// Tone frequency is auto-detected — no need to know the recording's CW
+  /// frequency in advance.
   /// Returns the decoded text, or an empty string on failure.
-  Future<String> analyzeWavFile(Uint8List wavBytes) async {
-    final parsed = _parseWavPcm(wavBytes);
-    if (parsed == null) return '';
-    final (pcm, sampleRate) = parsed;
-
-    // Use a detector tuned to the file's sample rate (handles recordings from
-    // other apps / sample rates other than the default 44100 Hz).
-    final detector = sampleRate == _sampleRate
-        ? _detector
-        : GoertzelDetector(
-            sampleRate: sampleRate,
-            targetFrequency: MorseTiming.defaultFrequencyHz.toDouble(),
-            frameSize: _frameSize,
-          );
-
-    final frames = GoertzelDetector.framesFromPcm16(pcm, _frameSize);
-    final magnitudes = frames.map((f) => detector.computePower(f)).toList();
-    return compute(
-        runOfflineAnalysisIsolate, (magnitudes, detector.frameDurationMs));
+  Future<String> analyzeWavFile(Uint8List wavBytes) {
+    // ignore: avoid_print
+    print('[MorseDbg] analyzeWavFile: ${wavBytes.length} bytes');
+    return compute(runOfflineWavAnalysisIsolate, (wavBytes, null));
   }
 
   /// Release all resources. Call once when this service is no longer needed.
@@ -171,6 +169,15 @@ class DecoderService {
         encoder: AudioEncoder.pcm16bits,
         sampleRate: _sampleRate,
         numChannels: 1,
+        // Use the unprocessed audio source on Android to bypass the system's
+        // Noise Suppressor (NS) and Automatic Gain Control (AGC).  These
+        // voice-optimised effects suppress periodic tones (treating them as
+        // "noise") and pump gain during silence, both of which corrupt Morse
+        // timing and amplitude — making calibration and threshold detection
+        // unreliable.  Requires Android N (API 24+).
+        androidConfig: AndroidRecordConfig(
+          audioSource: AndroidAudioSource.unprocessed,
+        ),
       ),
     );
     _audioSub = stream.listen(_onBytes);
@@ -231,40 +238,6 @@ class DecoderService {
   }
 
   // ── WAV parser ─────────────────────────────────────────────────────────────
-
-  /// Parses a WAV file and returns `(pcmSamples, sampleRate)`, or null if the
-  /// file is not a valid 16-bit mono PCM WAV.
-  static (Int16List pcm, int sampleRate)? _parseWavPcm(Uint8List bytes) {
-    if (bytes.length < 44) return null;
-    // RIFF header
-    if (bytes[0] != 0x52 || bytes[1] != 0x49 ||
-        bytes[2] != 0x46 || bytes[3] != 0x46) {
-      return null;
-    }
-    // WAVE marker
-    if (bytes[8] != 0x57 || bytes[9] != 0x41 ||
-        bytes[10] != 0x56 || bytes[11] != 0x45) {
-      return null;
-    }
-
-    final bd = ByteData.view(bytes.buffer);
-    final sampleRate = bd.getUint32(24, Endian.little);
-
-    // Walk chunks after the RIFF/WAVE header to find the 'data' chunk.
-    int offset = 12;
-    while (offset + 8 <= bytes.length) {
-      final id = String.fromCharCodes(bytes.sublist(offset, offset + 4));
-      final chunkSize = bd.getUint32(offset + 4, Endian.little);
-      if (id == 'data') {
-        final end = (offset + 8 + chunkSize).clamp(0, bytes.length);
-        final pcmBytes = bytes.sublist(offset + 8, end);
-        return (pcmBytes.buffer.asInt16List(), sampleRate);
-      }
-      offset += 8 + chunkSize;
-      if (chunkSize.isOdd) offset++; // RIFF pads odd-sized chunks
-    }
-    return null;
-  }
 
   // ── WAV builder ────────────────────────────────────────────────────────────
 

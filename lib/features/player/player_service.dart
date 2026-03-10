@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:injectable/injectable.dart';
@@ -128,11 +129,55 @@ class PlayerService {
     }
   }
 
+  // ── WAV file playback (decoder preview) ─────────────────────────────────
+
+  AudioSource? _wavSource;
+  SoundHandle? _wavHandle;
+
+  /// Play a WAV file from raw bytes. Stops any current WAV playback first.
+  ///
+  /// Playback is non-looping; the caller is responsible for calling [stopWav]
+  /// when done (or when the estimated duration elapses).
+  Future<void> playWav(Uint8List bytes) async {
+    await stopWav();
+    try {
+      _wavSource = await SoLoud.instance.loadMem('decoder_preview', bytes);
+      _wavHandle = await SoLoud.instance.play(_wavSource!, looping: false);
+    } catch (_) {
+      await _disposeWavSource();
+    }
+  }
+
+  /// Stop WAV playback started by [playWav] and free the audio source.
+  Future<void> stopWav() async {
+    final handle = _wavHandle;
+    _wavHandle = null;
+    if (handle != null) {
+      try {
+        await SoLoud.instance.stop(handle);
+      } catch (_) {
+        // handle may have already expired naturally
+      }
+    }
+    await _disposeWavSource();
+  }
+
+  Future<void> _disposeWavSource() async {
+    final src = _wavSource;
+    _wavSource = null;
+    if (src != null) {
+      try {
+        await SoLoud.instance.disposeSource(src);
+      } catch (_) {}
+    }
+  }
+
   /// Release all resources. Call once when the app is shutting down.
   @disposeMethod
   Future<void> dispose() async {
     await stop();
     await stopTone();
+    await stopWav();
     if (_source != null) {
       await SoLoud.instance.disposeSource(_source!);
       _source = null;

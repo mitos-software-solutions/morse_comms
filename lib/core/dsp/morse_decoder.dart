@@ -33,6 +33,12 @@ class AdaptiveTiming {
   double? _dashMs;
   double? _pendingFirstMs; // holds first ON until gap-based bootstrap
 
+  /// When set, overrides the 2×dot / 5×dot ITU thresholds with a measured
+  /// midpoint between the symbol-gap and letter-gap clusters.  This is derived
+  /// by [OfflineAnalyzer] from the actual OFF-event distribution and is
+  /// immune to Goertzel reverb inflation of [_dotMs].
+  double? _gapThresholdMs;
+
   // EMA weight for updating existing estimates (0.85 = slow, stable tracking).
   static const double _alpha = 0.85;
 
@@ -58,6 +64,9 @@ class AdaptiveTiming {
     if (_dashMs == null) {
       if (durationMs > _dotMs! * 2.0) {
         _dashMs = durationMs;
+        // ignore: avoid_print
+        print('[MorseDbg] dashMs learned: ${_dashMs!.toStringAsFixed(1)}ms'
+            ' (dotMs=${_dotMs!.toStringAsFixed(1)})');
       } else {
         _dotMs = _dotMs! * _alpha + durationMs * (1 - _alpha);
       }
@@ -82,14 +91,24 @@ class AdaptiveTiming {
     final first = _pendingFirstMs!;
     _pendingFirstMs = null;
     final ratio = first / gapMs;
+    // ignore: avoid_print
+    print('[MorseDbg] bootstrapFromGap: first=${first.toStringAsFixed(1)}ms'
+        ' gap=${gapMs.toStringAsFixed(1)}ms ratio=${ratio.toStringAsFixed(2)}');
     if (ratio > 2.0) {
       // first ≈ 3× gap → first was a dash, gap was a symbol gap
       _dotMs = gapMs;
       _dashMs = first;
+      // ignore: avoid_print
+      print('[MorseDbg] bootstrap→DASH  dotMs=${_dotMs!.toStringAsFixed(1)}'
+          ' dashMs=${_dashMs!.toStringAsFixed(1)}');
       return '-';
     } else {
       // ratio ≈ 1 or < 0.5 → first was a dot (gap is symbol or letter gap)
+      // NOTE: AMBIGUOUS when ratio≈1 (could be dash/letter). Assuming dot.
       _dotMs = first;
+      // ignore: avoid_print
+      print('[MorseDbg] bootstrap→DOT   dotMs=${_dotMs!.toStringAsFixed(1)}'
+          ' (ratio=${ratio.toStringAsFixed(2)} assumed dot)');
       return '.';
     }
   }
@@ -102,7 +121,18 @@ class AdaptiveTiming {
   }
 
   /// Classify an OFF duration as a symbol, letter, or word gap.
+  ///
+  /// When [_gapThresholdMs] is set (seeded from the offline analyzer's
+  /// measured gap distribution), it is used as the symbol/letter boundary
+  /// directly — making classification immune to reverb-inflated [_dotMs].
+  /// Otherwise falls back to ITU standard multiples of the dot unit.
   GapType classifyGap(double durationMs) {
+    if (_gapThresholdMs != null) {
+      final thresh = _gapThresholdMs!;
+      if (durationMs < thresh) return GapType.symbol;
+      if (durationMs < thresh * 3.0) return GapType.letter;
+      return GapType.word;
+    }
     final unit = _dotMs ?? 60.0; // fall back to 20 WPM if uncalibrated
     if (durationMs < unit * 2.0) return GapType.symbol;
     if (durationMs < unit * 5.0) return GapType.letter;
@@ -128,11 +158,33 @@ class AdaptiveTiming {
     return ms <= _dotMs! * 2.0 ? '.' : '-';
   }
 
+  /// Pre-seed known dot and dash durations, bypassing bootstrap entirely.
+  ///
+  /// Use when durations have been pre-estimated from a full signal histogram
+  /// (offline analysis). Clears any pending bootstrap state.
+  ///
+  /// [gapThresholdMs] — optional midpoint between the symbol-gap and
+  /// letter-gap clusters, as measured from the actual OFF-event distribution.
+  /// When provided, [classifyGap] uses this directly instead of [_dotMs]×2.
+  /// This makes letter-boundary detection immune to reverb inflation of [_dotMs].
+  void seed(double dotMs, double dashMs, {double? gapThresholdMs}) {
+    _dotMs = dotMs;
+    _dashMs = dashMs;
+    _pendingFirstMs = null;
+    _gapThresholdMs = gapThresholdMs;
+    // ignore: avoid_print
+    print('[MorseDbg] AdaptiveTiming seeded:'
+        ' dotMs=${dotMs.toStringAsFixed(1)}'
+        ' dashMs=${dashMs.toStringAsFixed(1)}'
+        '${gapThresholdMs != null ? ' gapThreshold=${gapThresholdMs.toStringAsFixed(1)}ms' : ''}');
+  }
+
   /// Reset all learned state.
   void reset() {
     _dotMs = null;
     _dashMs = null;
     _pendingFirstMs = null;
+    _gapThresholdMs = null;
   }
 
   // ── Private ──────────────────────────────────────────────────────────────
@@ -141,21 +193,29 @@ class AdaptiveTiming {
   /// Returns the retroactive symbol for the first event.
   String _twoEventBootstrap(double first, double second) {
     _pendingFirstMs = null;
+    final String retroSym;
     if (second > first * 2.0) {
       // first was a dot, second is a dash
       _dotMs = first;
       _dashMs = second;
-      return '.';
+      retroSym = '.';
     } else if (first > second * 2.0) {
       // first was a dash, second is a dot
       _dotMs = second;
       _dashMs = first;
-      return '-';
+      retroSym = '-';
     } else {
       // Both similar lengths — treat both as dots
       _dotMs = (first + second) / 2.0;
-      return '.';
+      retroSym = '.';
     }
+    // ignore: avoid_print
+    print('[MorseDbg] twoEventBootstrap: first=${first.toStringAsFixed(1)}'
+        ' second=${second.toStringAsFixed(1)}'
+        ' →retro=$retroSym'
+        ' dotMs=${_dotMs!.toStringAsFixed(1)}'
+        ' dashMs=${_dashMs?.toStringAsFixed(1) ?? "?"}');
+    return retroSym;
   }
 }
 
@@ -192,6 +252,17 @@ class MorseDecoder {
   /// [durationMs] — how long this state lasted.
   void processEvent({required bool on, required int durationMs}) {
     if (on) {
+      // Glitch filter: once timing is calibrated, discard ON events shorter
+      // than 25% of the estimated dot duration — these are noise spikes that
+      // slipped through the debounce (3-frame spikes at 35ms at 4 WPM etc.).
+      if (timing.isCalibrated &&
+          durationMs < timing.estimatedUnitMs * 0.25) {
+        // ignore: avoid_print
+        print('[MorseDbg] ON  ${durationMs}ms GLITCH (dot≈'
+            '${timing.estimatedUnitMs.toStringAsFixed(1)}ms) — discarded');
+        return;
+      }
+
       final retroSymbol = timing.observeOn(durationMs.toDouble());
       if (retroSymbol != null) {
         // Two-ON bootstrap completed: write the retroactively-fixed first symbol.
@@ -249,9 +320,9 @@ class MorseDecoder {
     if (_pattern.isEmpty) return;
     final pattern = _pattern.toString();
     _pattern.clear();
-    final char = kMorseTableReverse[pattern];
+    final char = kMorseTableReverse[pattern] ?? '?';
     // ignore: avoid_print
-    print('[MorseDbg] commit: "$pattern" → "${char ?? "?"}"');
-    if (char != null) _output.write(char);
+    print('[MorseDbg] commit: "$pattern" → "$char"');
+    _output.write(char);
   }
 }

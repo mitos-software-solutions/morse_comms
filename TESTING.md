@@ -19,7 +19,22 @@ flutter test
   - Covers:
     - Morse table, timing, and encoder/decoder math.
     - DSP components (Goertzel, decoder pipeline, offline analyzer, limit tests).
+    - `test/core/dsp/morse_decoder_test.dart` — adaptive timing, bootstrap, and edge cases.
+    - `test/core/dsp/custom_wav_test.dart` — decodes real captured YouTube WAV files (`yt1.wav`, `yt2.wav` in `scripts/test_wavs/custom_wavs/`); these are the **known-good baseline** for the live recording path.
+    - `test/core/dsp/live_recording_simulation_test.dart` — **live recording path simulation** (see below).
   - Purpose: ensure the **algorithmic heart** of the app is correct and stable.
+
+- **Live recording simulation tests**
+  - File: `test/core/dsp/live_recording_simulation_test.dart`
+  - Purpose: cover the recording degradation scenarios that cannot be tested with a real microphone. Synthetic PCM is injected directly into `OfflineAnalyzer.analyzeWav()` — the same code path used by `DecoderService.analyzeRecording()` after the 2026-03-10 unification.
+  - Helper: `test/helpers/sine_morse_generator.dart` — generates ITU-timing sine-wave PCM; used across multiple DSP test files.
+  - Test groups and what they verify:
+    1. **Non-standard Morse timing** — senders with dash:dot ratio ≠ 3.0 and compressed inter-symbol gaps (root cause of the 2026-03-10 "OOOOO" device failure). Verifies the `dotMs < 150ms` guard routes low-WPM recordings through the seeded path, not adaptive bootstrap.
+    2. **Mouse-click transient** — short wideband burst at recording start (user clicking to play the YouTube video). The `_filterShortOns` pass strips any ON event shorter than `minOnMs` (29ms) before decoding, so clicks do not produce spurious leading characters.
+    3. **Simulated room reverb** — exponential Goertzel power decay injected after each tone burst. The gap-cluster threshold fix (`_findGapThreshold` + seeded `AdaptiveTiming`) makes letter-gap classification immune to reverb-inflated dotMs. Tests verify exact "SOS" decoding at 2-frame/15 WPM, 4-frame/10 WPM, and 8-frame/5 WPM reverb levels.
+    4. **Tone frequency auto-detection** — unknown CW frequencies (450/600/750/800 Hz) decoded with `targetFrequencyHz: null`; verifies `_detectDominantFrequency` correctly selects the tone.
+    5. **No silence lead-in** — recording starts mid-transmission (no calibration silence). Verifies the two-pass global noise floor still estimates correctly.
+  - All previously-known reverb limitations are now resolved via the gap-cluster threshold (see `decoder_accuracy.md`).
 
 - **Feature logic tests (BLoC/cubits/services)**
   - Location: `test/features/**`

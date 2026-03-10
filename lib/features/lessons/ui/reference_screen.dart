@@ -580,29 +580,37 @@ class _TimingRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          SizedBox(
-            width: 160,
+          Expanded(
+            flex: 3,
             child: Text(label,
                 style: Theme.of(context).textTheme.bodySmall),
           ),
-          ...List.generate(
-            units,
-            (_) => Container(
-              width: 16,
-              height: 10,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(3),
-              ),
+          Expanded(
+            flex: 4,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...List.generate(
+                  units,
+                  (_) => Container(
+                    width: 14,
+                    height: 10,
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text('$units unit${units > 1 ? 's' : ''}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: color)),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text('$units unit${units > 1 ? 's' : ''}',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: color)),
         ],
       ),
     );

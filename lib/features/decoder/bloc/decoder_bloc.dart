@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:typed_data'; // ignore: depend_on_referenced_packages
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -13,6 +13,10 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
 
   Timer? _recordingTimer;
   StreamSubscription<SignalSnapshot>? _signalSub;
+
+  // Holds the WAV bytes for the current session, bridging the gap between
+  // _onAnalyzeFile (bytes arrive) and _onAnalysisCompleted (result emitted).
+  Uint8List? _pendingAudioBytes;
 
   DecoderBloc({required DecoderService service})
       : _service = service,
@@ -42,6 +46,7 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
       return;
     }
 
+    _pendingAudioBytes = null;
     emit(state.copyWith(
       status: DecoderStatus.listening,
       decodedText: '',
@@ -51,6 +56,7 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
       clearSignal: true,
       clearError: true,
       clearSavedPath: true,
+      clearAudioBytes: true,
     ));
 
     _signalSub = _service.signalStream
@@ -126,6 +132,7 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
     DecoderFileAnalysisRequested event,
     Emitter<DecoderState> emit,
   ) async {
+    _pendingAudioBytes = event.wavBytes;
     emit(state.copyWith(
       status: DecoderStatus.analyzing,
       decodedText: '',
@@ -133,6 +140,7 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
       clearError: true,
       clearSavedPath: true,
       clearSignal: true,
+      clearAudioBytes: true,
     ));
     try {
       final text = await _service.analyzeWavFile(event.wavBytes);
@@ -162,9 +170,16 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
     _AnalysisCompleted event,
     Emitter<DecoderState> emit,
   ) {
+    // For file analysis: bytes were stashed in _pendingAudioBytes.
+    // For mic recording: build WAV from the accumulated PCM buffer.
+    final audioBytes = state.isFileAnalysis
+        ? _pendingAudioBytes
+        : _service.buildRecordingWav();
+    _pendingAudioBytes = null;
     emit(state.copyWith(
       status: DecoderStatus.result,
       decodedText: event.text,
+      audioBytes: audioBytes,
     ));
   }
 

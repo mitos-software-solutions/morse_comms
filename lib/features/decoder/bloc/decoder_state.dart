@@ -40,6 +40,10 @@ final class DecoderState {
   /// Hides the Save button since the audio is already on disk.
   final bool isFileAnalysis;
 
+  /// Raw WAV bytes of the current audio (predefined example, user file, or
+  /// mic recording). Non-null once analysis completes; used for preview playback.
+  final Uint8List? audioBytes;
+
   const DecoderState({
     this.status = DecoderStatus.idle,
     this.decodedText = '',
@@ -49,6 +53,7 @@ final class DecoderState {
     this.savedPath,
     this.errorMessage,
     this.isFileAnalysis = false,
+    this.audioBytes,
   });
 
   bool get isListening => status == DecoderStatus.listening;
@@ -75,9 +80,11 @@ final class DecoderState {
     String? savedPath,
     String? errorMessage,
     bool? isFileAnalysis,
+    Uint8List? audioBytes,
     bool clearSignal = false,
     bool clearError = false,
     bool clearSavedPath = false,
+    bool clearAudioBytes = false,
   }) =>
       DecoderState(
         status: status ?? this.status,
@@ -88,5 +95,6 @@ final class DecoderState {
         savedPath: clearSavedPath ? null : (savedPath ?? this.savedPath),
         errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
         isFileAnalysis: isFileAnalysis ?? this.isFileAnalysis,
+        audioBytes: clearAudioBytes ? null : (audioBytes ?? this.audioBytes),
       );
 }

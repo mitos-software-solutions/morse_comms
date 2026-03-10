@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -282,11 +284,14 @@ class _DecoderView extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // ── Button row: Listen / Stop | Save ─────────────────────
+            // ── Button row: Listen / Stop | Play | Save ──────────────
             BlocBuilder<DecoderBloc, DecoderState>(
               buildWhen: (p, c) =>
-                  p.status != c.status || p.savedPath != c.savedPath,
+                  p.status != c.status ||
+                  p.savedPath != c.savedPath ||
+                  p.audioBytes != c.audioBytes,
               builder: (context, state) {
+                final player = context.read<PlayerService>();
                 return Row(
                   children: [
                     // Listen / Stop
@@ -328,13 +333,22 @@ class _DecoderView extends StatelessWidget {
                       ),
                     ),
 
+                    // Play / Stop audio preview
+                    if (state.audioBytes != null) ...[
+                      const SizedBox(width: 8),
+                      _AudioPlayButton(
+                        audioBytes: state.audioBytes!,
+                        player: player,
+                      ),
+                    ],
+
                     // Save to Downloads (Android) / Files app (iOS)
                     if (state.canSave) ...[
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       OutlinedButton.icon(
                         onPressed: () => _showSaveDialog(context),
                         icon: const Icon(Icons.save_alt),
-                        label: const Text('Save to Device'),
+                        label: const Text('Save'),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
@@ -508,6 +522,83 @@ class _Banner extends StatelessWidget {
             child: Text(message, style: TextStyle(color: foreground)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Audio play/stop button ────────────────────────────────────────────────────
+
+class _AudioPlayButton extends StatefulWidget {
+  final Uint8List audioBytes;
+  final PlayerService player;
+
+  const _AudioPlayButton({required this.audioBytes, required this.player});
+
+  @override
+  State<_AudioPlayButton> createState() => _AudioPlayButtonState();
+}
+
+class _AudioPlayButtonState extends State<_AudioPlayButton> {
+  bool _isPlaying = false;
+  DateTime? _playStarted;
+  static const _minPlayMs = 500; // avoid accidental double-tap
+
+  int _estimateDurationMs(Uint8List bytes) {
+    if (bytes.length < 44) return 0;
+    final bd = ByteData.view(bytes.buffer);
+    final byteRate = bd.getUint32(28, Endian.little);
+    if (byteRate == 0) return 0;
+    return ((bytes.length - 44) * 1000 / byteRate).round();
+  }
+
+  Future<void> _play() async {
+    if (_isPlaying) return;
+    setState(() {
+      _isPlaying = true;
+      _playStarted = DateTime.now();
+    });
+    await widget.player.playWav(widget.audioBytes);
+    final durationMs = _estimateDurationMs(widget.audioBytes);
+    if (durationMs > 0) {
+      Future.delayed(Duration(milliseconds: durationMs), () {
+        if (mounted && _isPlaying) setState(() => _isPlaying = false);
+      });
+    }
+  }
+
+  Future<void> _stop() async {
+    final elapsed = _playStarted == null
+        ? _minPlayMs
+        : DateTime.now().difference(_playStarted!).inMilliseconds;
+    if (elapsed < _minPlayMs) return; // debounce
+    await widget.player.stopWav();
+    if (mounted) setState(() => _isPlaying = false);
+  }
+
+  @override
+  void didUpdateWidget(_AudioPlayButton old) {
+    super.didUpdateWidget(old);
+    if (old.audioBytes != widget.audioBytes && _isPlaying) {
+      widget.player.stopWav();
+      setState(() => _isPlaying = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_isPlaying) widget.player.stopWav();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton.outlined(
+      icon: Icon(_isPlaying ? Icons.stop_circle_outlined : Icons.play_circle_outline),
+      tooltip: _isPlaying ? 'Stop playback' : 'Play audio',
+      onPressed: _isPlaying ? _stop : _play,
+      style: IconButton.styleFrom(
+        padding: const EdgeInsets.all(12),
       ),
     );
   }

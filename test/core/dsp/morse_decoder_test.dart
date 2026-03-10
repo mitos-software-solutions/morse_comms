@@ -181,15 +181,15 @@ void main() {
   });
 
   group('MorseDecoder — edge cases', () {
-    test('unknown pattern is skipped silently', () {
+    test('unknown pattern outputs "?"', () {
       final d = makeDecoder();
-      // 6 dots = "......" which is not in the table
+      // 6 dots = "......" which is not in the table → outputs '?'
       for (int i = 0; i < 6; i++) {
         d.processEvent(on: true, durationMs: timing.dotMs);
         if (i < 5) d.processEvent(on: false, durationMs: timing.symbolGapMs);
       }
       d.flush();
-      expect(d.decodedText, '');
+      expect(d.decodedText, '?');
     });
 
     test('leading silence before any tone does not produce spurious spaces', () {

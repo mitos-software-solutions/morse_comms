@@ -202,6 +202,14 @@ class DecoderPipeline {
     _resetDecodeState();
   }
 
+  /// Pre-seed dot/dash durations into the decoder's adaptive timing.
+  ///
+  /// Must be called *after* [resetForDecode]. Bypasses the bootstrap phase so
+  /// the very first ON event is classified correctly.
+  void seedTiming(double dotMs, double dashMs) {
+    _decoder.timing.seed(dotMs, dashMs);
+  }
+
   /// Release stream controllers. Call once when done with this pipeline.
   Future<void> dispose() async {
     await _textController.close();
