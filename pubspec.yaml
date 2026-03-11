@@ -41,6 +41,9 @@ dependencies:
   # File picker (open WAV files for analysis)
   file_selector: ^1.0.0
 
+  # URL launcher (open external links)
+  url_launcher: ^6.3.1
+
 
 
 dev_dependencies:

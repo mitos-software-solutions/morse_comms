@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../bloc/settings_cubit.dart';
 
@@ -226,6 +227,38 @@ class _FrequencyTile extends StatelessWidget {
 class _SupportCard extends StatelessWidget {
   const _SupportCard();
 
+  static Future<void> _launchDonationUrl(BuildContext context) async {
+    const url = 'https://www.buymeacoffee.com/MitosSoftwareSolutions';
+    final uri = Uri.parse(url);
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        if (context.mounted) {
+          _showError(context, 'Could not open donation link');
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _showError(context, 'Could not open donation link');
+      }
+    }
+  }
+
+  static void _showError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -265,6 +298,19 @@ class _SupportCard extends StatelessWidget {
                     color: colors.onSecondaryContainer,
                     height: 1.5,
                   ),
+            ),
+            const SizedBox(height: 16),
+            Semantics(
+              label: 'Opens external link to Buy Me a Coffee',
+              button: true,
+              child: FilledButton.icon(
+                onPressed: () => _launchDonationUrl(context),
+                icon: const Icon(Icons.coffee),
+                label: const Text('Buy Me a Coffee'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
             ),
           ],
         ),

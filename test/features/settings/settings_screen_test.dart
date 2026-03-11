@@ -84,5 +84,119 @@ void main() {
 
     expect(cubit.state.sideTone, isTrue);
   });
+
+  testWidgets('Donation button exists in widget tree',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    // Scroll down to make the donation button visible.
+    await tester.dragUntilVisible(
+      find.text('Buy Me a Coffee'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify the donation button exists.
+    final buttonFinder = find.widgetWithText(FilledButton, 'Buy Me a Coffee');
+    expect(buttonFinder, findsOneWidget);
+  });
+
+  testWidgets('Donation button has correct label text',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    // Scroll down to make the donation button visible.
+    await tester.dragUntilVisible(
+      find.text('Buy Me a Coffee'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify the button has the correct label text.
+    expect(find.text('Buy Me a Coffee'), findsOneWidget);
+  });
+
+  testWidgets('Donation button has coffee icon', (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    // Scroll down to make the donation button visible.
+    await tester.dragUntilVisible(
+      find.text('Buy Me a Coffee'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    // Find the button first.
+    final buttonFinder = find.widgetWithText(FilledButton, 'Buy Me a Coffee');
+    expect(buttonFinder, findsOneWidget);
+
+    // Verify the button has a coffee icon.
+    final iconFinder = find.descendant(
+      of: buttonFinder,
+      matching: find.byIcon(Icons.coffee),
+    );
+    expect(iconFinder, findsOneWidget);
+  });
+
+  testWidgets('Donation button meets 48x48 minimum touch target size',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    // Scroll down to make the donation button visible.
+    await tester.dragUntilVisible(
+      find.text('Buy Me a Coffee'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    // Find the button and check its size.
+    final buttonFinder = find.widgetWithText(FilledButton, 'Buy Me a Coffee');
+    expect(buttonFinder, findsOneWidget);
+
+    final buttonSize = tester.getSize(buttonFinder);
+    
+    // Verify minimum touch target size of 48x48 logical pixels.
+    expect(buttonSize.height, greaterThanOrEqualTo(48.0));
+    expect(buttonSize.width, greaterThanOrEqualTo(48.0));
+  });
+
+  testWidgets('Donation button has accessibility label',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    // Scroll down to make the donation button visible.
+    await tester.dragUntilVisible(
+      find.text('Buy Me a Coffee'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    // Find the Semantics widget with our specific label.
+    final semanticsFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is Semantics &&
+          widget.properties.label == 'Opens external link to Buy Me a Coffee',
+    );
+    expect(semanticsFinder, findsOneWidget);
+
+    // Verify the Semantics widget has button property set.
+    final semanticsWidget = tester.widget<Semantics>(semanticsFinder);
+    expect(semanticsWidget.properties.button, isTrue);
+  });
 }
 
