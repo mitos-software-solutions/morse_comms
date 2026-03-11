@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:morse_comms/core/dsp/decoder_pipeline.dart';
 import 'package:morse_comms/features/decoder/data/decoder_service.dart';
 
 void main() {
@@ -47,7 +46,7 @@ void main() {
 
       test('DecoderService accepts optional onSideTone callback', () {
         // Verify the constructor signature
-        final callback = (bool isTone) {};
+        void callback(bool isTone) {}
         expect(callback, isNotNull);
       });
     });
