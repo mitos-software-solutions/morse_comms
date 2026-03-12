@@ -198,5 +198,109 @@ void main() {
     final semanticsWidget = tester.widget<Semantics>(semanticsFinder);
     expect(semanticsWidget.properties.button, isTrue);
   });
+
+  // ---------------------------------------------------------------------------
+  // Support section — Get involved
+  // ---------------------------------------------------------------------------
+
+  testWidgets('Get involved section shows title and description',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    await tester.dragUntilVisible(
+      find.text('SUPPORT & CONTRIBUTE'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('SUPPORT & CONTRIBUTE'), findsOneWidget);
+    expect(find.text('Get involved'), findsOneWidget);
+    expect(
+      find.textContaining('free, open source, and has no ads'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('View on GitHub button exists with code icon',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    await tester.dragUntilVisible(
+      find.text('View on GitHub'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    final buttonFinder = find.widgetWithText(FilledButton, 'View on GitHub');
+    expect(buttonFinder, findsOneWidget);
+
+    expect(
+      find.descendant(of: buttonFinder, matching: find.byIcon(Icons.code)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('View on GitHub button meets 48x48 minimum touch target size',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    await tester.dragUntilVisible(
+      find.text('View on GitHub'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    final buttonSize =
+        tester.getSize(find.widgetWithText(FilledButton, 'View on GitHub'));
+    expect(buttonSize.height, greaterThanOrEqualTo(48.0));
+    expect(buttonSize.width, greaterThanOrEqualTo(48.0));
+  });
+
+  // ---------------------------------------------------------------------------
+  // Support section — Buy me a coffee
+  // ---------------------------------------------------------------------------
+
+  testWidgets('Buy me a coffee section shows correct heading',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    await tester.dragUntilVisible(
+      find.text('Buy me a coffee?'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Buy me a coffee?'), findsOneWidget);
+    expect(find.textContaining('virtual coffee'), findsOneWidget);
+  });
+
+  testWidgets('Both action buttons in the support section are FilledButtons',
+      (WidgetTester tester) async {
+    final cubit = await _makeSettingsCubit();
+
+    await tester.pumpWidget(_buildTestApp(cubit));
+
+    await tester.dragUntilVisible(
+      find.text('Buy Me a Coffee'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'View on GitHub'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Buy Me a Coffee'), findsOneWidget);
+  });
 }
 

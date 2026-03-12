@@ -39,6 +39,15 @@ Run the Flutter test suite:
 flutter test
 ```
 
+## Static analysis
+
+Run the analyser with info-level checks enforced (zero warnings/infos allowed):
+```bash
+flutter analyze
+```
+
+This is the same command run in CI. All code merged to `main` must pass cleanly.
+
 ## Running on Android emulator
 
 **Full dev mode (hot reload):**

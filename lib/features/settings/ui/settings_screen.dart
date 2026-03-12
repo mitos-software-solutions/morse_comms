@@ -45,7 +45,8 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: cubit.setSttLocaleId,
               ),
               const SizedBox(height: 16),
-              const _SupportCard(),
+              _SectionHeader('Support & Contribute'),
+              const _SupportSection(),
               const SizedBox(height: 16),
               _SectionHeader('About'),
               ListTile(
@@ -221,99 +222,136 @@ class _FrequencyTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Support card
+// Support section (get involved + donate — one unified card)
 // ---------------------------------------------------------------------------
 
-class _SupportCard extends StatelessWidget {
-  const _SupportCard();
+class _SupportSection extends StatelessWidget {
+  const _SupportSection();
 
-  static Future<void> _launchDonationUrl(BuildContext context) async {
-    const url = 'https://www.buymeacoffee.com/MitosSoftwareSolutions';
+  static Future<void> _launch(BuildContext context, String url, String errorMsg) async {
     final uri = Uri.parse(url);
-
     try {
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-
-      if (!launched) {
-        if (context.mounted) {
-          _showError(context, 'Could not open donation link');
-        }
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), behavior: SnackBarBehavior.floating),
+        );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
-        _showError(context, 'Could not open donation link');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), behavior: SnackBarBehavior.floating),
+        );
       }
     }
-  }
-
-  static void _showError(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final onCard = colors.onSecondaryContainer;
+    final textTheme = Theme.of(context).textTheme;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       color: colors.secondaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Get involved ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('🍺', style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Buy me a beer?',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: colors.onSecondaryContainer,
-                        ),
+                Row(
+                  children: [
+                    Icon(Icons.hub_outlined, color: onCard),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Get involved',
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: onCard,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Morse Comms is free, open source, and has no ads — and it '
+                  "always will be. Found something broken? Have an idea for a "
+                  'new feature? Want to help build it? All of that is welcome.',
+                  style: textTheme.bodySmall?.copyWith(color: onCard, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => _launch(
+                    context,
+                    'https://github.com/mitos-software-solutions/morse_comms',
+                    'Could not open GitHub link',
+                  ),
+                  icon: const Icon(Icons.code, size: 16),
+                  label: const Text('View on GitHub'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 48),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              "Hey! I'm just a regular guy who built this in his spare time "
-              "because I love Morse code and couldn't find a good offline tool "
-              "for preppers and ham radio operators.\n\n"
-              "Morse Comms is completely free — no ads, no subscriptions, "
-              "no data collection — and it always will be. "
-              "If it's been useful to you, a virtual beer would honestly make my day. "
-              "Either way, thanks for being here. 73 de the dev.",
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSecondaryContainer,
-                    height: 1.5,
-                  ),
-            ),
-            const SizedBox(height: 16),
-            Semantics(
-              label: 'Opens external link to Buy Me a Coffee',
-              button: true,
-              child: FilledButton.icon(
-                onPressed: () => _launchDonationUrl(context),
-                icon: const Icon(Icons.coffee),
-                label: const Text('Buy Me a Coffee'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 48),
+          ),
+
+          Divider(height: 1, indent: 20, endIndent: 20, color: onCard.withValues(alpha: 0.2)),
+
+          // ── Buy me a beer ─────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('☕', style: textTheme.headlineMedium),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Buy me a coffee?',
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: onCard,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 10),
+                Text(
+                  "I'm just a regular guy who built this in his spare time "
+                  "because I love Morse code and couldn't find a good offline "
+                  "tool for preppers and ham radio operators. "
+                  "If it's been useful to you, a virtual coffee would honestly "
+                  "make my day. Either way, thanks for being here. 73 de the dev.",
+                  style: textTheme.bodySmall?.copyWith(color: onCard, height: 1.5),
+                ),
+                const SizedBox(height: 16),
+                Semantics(
+                  label: 'Opens external link to Buy Me a Coffee',
+                  button: true,
+                  child: FilledButton.icon(
+                    onPressed: () => _launch(
+                      context,
+                      'https://www.buymeacoffee.com/MitosSoftwareSolutions',
+                      'Could not open donation link',
+                    ),
+                    icon: const Icon(Icons.coffee),
+                    label: const Text('Buy Me a Coffee'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

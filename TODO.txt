@@ -1,3 +1,0 @@
-- add reveal answer to each lesson
-- fix bug with persistent buzzing noise in decoder
-- replace unlock premium with buy me a beer -> make a nice note about being a single guy trying to produce something useful 
