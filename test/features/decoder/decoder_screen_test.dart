@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -34,6 +36,12 @@ class _StubPlayerService extends PlayerService {
   Future<void> stopTone() async {
     stopToneCalled = true;
   }
+
+  @override
+  Future<void> playWav(Uint8List bytes) async {}
+
+  @override
+  Future<void> stopWav() async {}
 }
 
 Future<SettingsCubit> _makeSettingsCubit(
@@ -79,7 +87,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Listen'), findsOneWidget);
   });
 
-  testWidgets('New Recording icon is disabled initially',
+  testWidgets('Audio toolbar is always present with expected controls',
       (WidgetTester tester) async {
     final settingsCubit = await _makeSettingsCubit();
     final player = _StubPlayerService();
@@ -89,11 +97,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final newRecordingFinder = find.byTooltip('New Recording');
-    expect(newRecordingFinder, findsOneWidget);
+    // Toolbar always shows these three controls.
+    expect(find.byTooltip('New Recording'), findsOneWidget);
+    expect(find.byTooltip('Load Example'), findsOneWidget);
+    expect(find.byTooltip('Open Recording'), findsOneWidget);
   });
 
-  testWidgets('Save to Device button is hidden when there is no result',
+  testWidgets('Play and Save are hidden in toolbar when no audio exists',
       (WidgetTester tester) async {
     final settingsCubit = await _makeSettingsCubit();
     final player = _StubPlayerService();
@@ -103,8 +113,38 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // No save button should be visible without a decodable result.
-    expect(find.text('Save to Device'), findsNothing);
+    // Play and Save only appear once audioBytes is populated.
+    expect(find.byTooltip('Play audio'), findsNothing);
+    expect(find.byTooltip('Save'), findsNothing);
+  });
+
+  testWidgets('App bar has no action buttons — title only',
+      (WidgetTester tester) async {
+    final settingsCubit = await _makeSettingsCubit();
+    final player = _StubPlayerService();
+
+    await tester.pumpWidget(
+      _buildTestApp(settingsCubit: settingsCubit, player: player),
+    );
+    await tester.pumpAndSettle();
+
+    // App bar title present.
+    expect(find.text('Morse Decoder'), findsOneWidget);
+    // Old app bar actions are gone.
+    expect(find.byTooltip('New Recording').evaluate().length, equals(1));
+  });
+
+  testWidgets('Listen button label never says Record Again',
+      (WidgetTester tester) async {
+    final settingsCubit = await _makeSettingsCubit();
+    final player = _StubPlayerService();
+
+    await tester.pumpWidget(
+      _buildTestApp(settingsCubit: settingsCubit, player: player),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Record Again'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Listen'), findsOneWidget);
   });
 }
-

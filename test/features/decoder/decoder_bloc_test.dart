@@ -203,40 +203,41 @@ void main() {
         expect(state.canListen, isFalse);
       });
 
-      test('canSave is true when result from mic recording with no save', () {
+      test('canSave is true when audioBytes is not null', () {
+        final state = DecoderState(audioBytes: Uint8List(100));
+        expect(state.canSave, isTrue);
+      });
+
+      test('canSave is false when audioBytes is null', () {
+        const state = DecoderState();
+        expect(state.canSave, isFalse);
+      });
+
+      test('canSave is true for mic recording result', () {
         final state = DecoderState(
           status: DecoderStatus.result,
           isFileAnalysis: false,
-          savedPath: null,
+          audioBytes: Uint8List(100),
         );
         expect(state.canSave, isTrue);
       });
 
-      test('canSave is false when already saved', () {
-        final state = DecoderState(
-          status: DecoderStatus.result,
-          isFileAnalysis: false,
-          savedPath: '/path/to/file.wav',
-        );
-        expect(state.canSave, isFalse);
-      });
-
-      test('canSave is false when file analysis', () {
+      test('canSave is true for file analysis result', () {
         final state = DecoderState(
           status: DecoderStatus.result,
           isFileAnalysis: true,
-          savedPath: null,
+          audioBytes: Uint8List(100),
         );
-        expect(state.canSave, isFalse);
+        expect(state.canSave, isTrue);
       });
 
-      test('canSave is false when not result status', () {
-        const state = DecoderState(
-          status: DecoderStatus.idle,
-          isFileAnalysis: false,
-          savedPath: null,
+      test('canSave is true even when already saved (user may re-save)', () {
+        final state = DecoderState(
+          status: DecoderStatus.result,
+          savedPath: '/path/to/file.wav',
+          audioBytes: Uint8List(100),
         );
-        expect(state.canSave, isFalse);
+        expect(state.canSave, isTrue);
       });
 
       test('canShare is true when savedPath is not null', () {
@@ -282,6 +283,55 @@ void main() {
       test('DecoderCleared event exists', () {
         final event = DecoderCleared();
         expect(event, isNotNull);
+      });
+
+      test('DecoderAudioPlayRequested event exists', () {
+        final event = DecoderAudioPlayRequested();
+        expect(event, isNotNull);
+      });
+
+      test('DecoderAudioStopRequested event exists', () {
+        final event = DecoderAudioStopRequested();
+        expect(event, isNotNull);
+      });
+
+      test('DecoderAudioPlaybackCompleted event exists', () {
+        final event = DecoderAudioPlaybackCompleted();
+        expect(event, isNotNull);
+      });
+    });
+
+    group('isPlayingAudio', () {
+      test('initial isPlayingAudio is false', () {
+        const state = DecoderState();
+        expect(state.isPlayingAudio, isFalse);
+      });
+
+      test('copyWith updates isPlayingAudio to true', () {
+        const state = DecoderState();
+        final updated = state.copyWith(isPlayingAudio: true);
+        expect(updated.isPlayingAudio, isTrue);
+      });
+
+      test('copyWith updates isPlayingAudio to false', () {
+        const state = DecoderState(isPlayingAudio: true);
+        final updated = state.copyWith(isPlayingAudio: false);
+        expect(updated.isPlayingAudio, isFalse);
+      });
+
+      test('copyWith preserves isPlayingAudio when not specified', () {
+        const state = DecoderState(isPlayingAudio: true);
+        final updated = state.copyWith(decodedText: 'SOS');
+        expect(updated.isPlayingAudio, isTrue);
+      });
+
+      test('isPlayingAudio is independent of recording status', () {
+        final state = DecoderState(
+          status: DecoderStatus.listening,
+          isPlayingAudio: true,
+        );
+        expect(state.isListening, isTrue);
+        expect(state.isPlayingAudio, isTrue);
       });
     });
 

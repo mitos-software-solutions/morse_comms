@@ -24,6 +24,15 @@ final class DecoderFileAnalysisRequested extends DecoderEvent {
 /// User pressed Clear / New Recording — return to idle.
 final class DecoderCleared extends DecoderEvent {}
 
+/// User pressed Play in the audio toolbar — play the current audioBytes.
+final class DecoderAudioPlayRequested extends DecoderEvent {}
+
+/// User pressed Stop in the audio toolbar — stop WAV playback.
+final class DecoderAudioStopRequested extends DecoderEvent {}
+
+/// WAV playback reached its natural end (timer fired after estimated duration).
+final class DecoderAudioPlaybackCompleted extends DecoderEvent {}
+
 // ── Internal events ───────────────────────────────────────────────────────────
 
 /// Recording timer tick (fired every second while listening).

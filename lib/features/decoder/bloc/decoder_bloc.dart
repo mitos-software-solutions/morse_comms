@@ -3,6 +3,7 @@ import 'dart:typed_data'; // ignore: depend_on_referenced_packages
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../player/player_service.dart';
 import '../data/decoder_service.dart';
 
 part 'decoder_event.dart';
@@ -10,6 +11,7 @@ part 'decoder_state.dart';
 
 class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
   final DecoderService _service;
+  final PlayerService _player;
 
   Timer? _recordingTimer;
   StreamSubscription<SignalSnapshot>? _signalSub;
@@ -18,8 +20,9 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
   // _onAnalyzeFile (bytes arrive) and _onAnalysisCompleted (result emitted).
   Uint8List? _pendingAudioBytes;
 
-  DecoderBloc({required DecoderService service})
+  DecoderBloc({required DecoderService service, required PlayerService player})
       : _service = service,
+        _player = player,
         super(const DecoderState()) {
     on<DecoderListenRequested>(_onListen);
     on<DecoderStopRequested>(_onStop);
@@ -27,6 +30,9 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
     on<DecoderShareRequested>(_onShare);
     on<DecoderFileAnalysisRequested>(_onAnalyzeFile);
     on<DecoderCleared>(_onClear);
+    on<DecoderAudioPlayRequested>(_onAudioPlay);
+    on<DecoderAudioStopRequested>(_onAudioStop);
+    on<DecoderAudioPlaybackCompleted>(_onAudioPlaybackCompleted);
     on<_TimerTick>(_onTimerTick);
     on<_SignalUpdated>(_onSignalUpdated);
     on<_AnalysisCompleted>(_onAnalysisCompleted);
@@ -40,6 +46,12 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
     DecoderListenRequested event,
     Emitter<DecoderState> emit,
   ) async {
+    // Stop any active WAV playback before opening the mic.
+    if (state.isPlayingAudio) {
+      await _player.stopWav();
+      emit(state.copyWith(isPlayingAudio: false));
+    }
+
     final permitted = await _service.hasPermission();
     if (!permitted) {
       emit(state.copyWith(permissionDenied: true));
@@ -56,7 +68,8 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
       clearSignal: true,
       clearError: true,
       clearSavedPath: true,
-      clearAudioBytes: true,
+      // audioBytes intentionally preserved so the toolbar Play/Save stay
+      // visible during recording (enables the live-decode test flow).
     ));
 
     _signalSub = _service.signalStream
@@ -152,8 +165,48 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
 
   // ── Clear ─────────────────────────────────────────────────────────────────
 
-  void _onClear(DecoderCleared event, Emitter<DecoderState> emit) {
+  Future<void> _onClear(
+    DecoderCleared event,
+    Emitter<DecoderState> emit,
+  ) async {
+    if (state.isPlayingAudio) {
+      await _player.stopWav();
+    }
     emit(const DecoderState());
+  }
+
+  // ── Audio playback ────────────────────────────────────────────────────────
+
+  Future<void> _onAudioPlay(
+    DecoderAudioPlayRequested event,
+    Emitter<DecoderState> emit,
+  ) async {
+    final bytes = state.audioBytes;
+    if (bytes == null) return;
+    emit(state.copyWith(isPlayingAudio: true));
+    await _player.playWav(bytes);
+    final durationMs = _estimateDurationMs(bytes);
+    if (durationMs > 0) {
+      Future.delayed(
+        Duration(milliseconds: durationMs),
+        () { if (!isClosed) add(DecoderAudioPlaybackCompleted()); },
+      );
+    }
+  }
+
+  Future<void> _onAudioStop(
+    DecoderAudioStopRequested event,
+    Emitter<DecoderState> emit,
+  ) async {
+    await _player.stopWav();
+    emit(state.copyWith(isPlayingAudio: false));
+  }
+
+  void _onAudioPlaybackCompleted(
+    DecoderAudioPlaybackCompleted event,
+    Emitter<DecoderState> emit,
+  ) {
+    emit(state.copyWith(isPlayingAudio: false));
   }
 
   // ── Internal event handlers ───────────────────────────────────────────────
@@ -201,6 +254,7 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
   Future<void> close() async {
     _recordingTimer?.cancel();
     await _signalSub?.cancel();
+    if (state.isPlayingAudio) await _player.stopWav();
     await _service.dispose();
     return super.close();
   }
@@ -208,4 +262,13 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   static String _pad(int n) => n.toString().padLeft(2, '0');
+
+  /// Estimates WAV playback duration from the RIFF byte-rate header field.
+  static int _estimateDurationMs(Uint8List bytes) {
+    if (bytes.length < 44) return 0;
+    final bd = ByteData.view(bytes.buffer);
+    final byteRate = bd.getUint32(28, Endian.little);
+    if (byteRate == 0) return 0;
+    return ((bytes.length - 44) * 1000 / byteRate).round();
+  }
 }

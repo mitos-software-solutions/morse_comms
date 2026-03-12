@@ -80,5 +80,6 @@ flutter:
 
   assets:
     - assets/examples/sos_20wpm.wav
-    - assets/examples/paris_20wpm.wav
     - assets/examples/alphabet_20wpm.wav
+    - assets/examples/hello_world_20db.wav
+    - assets/examples/stereo_hello_world_48k.wav

@@ -37,7 +37,6 @@ final class DecoderState {
   final String? errorMessage;
 
   /// True when the result comes from a user-opened file (not a mic recording).
-  /// Hides the Save button since the audio is already on disk.
   final bool isFileAnalysis;
 
   /// Raw WAV bytes of the current audio (predefined example, user file, or
@@ -47,6 +46,9 @@ final class DecoderState {
   /// Recording quality confidence [0.0–1.0] from the offline analyzer.
   /// 1.0 = HIGH (not shown), 0.7 = MED (subtle badge), below 0.7 = LOW (prominent badge).
   final double recordingQuality;
+
+  /// True while the previously loaded/recorded WAV is playing through the speaker.
+  final bool isPlayingAudio;
 
   const DecoderState({
     this.status = DecoderStatus.idle,
@@ -59,6 +61,7 @@ final class DecoderState {
     this.isFileAnalysis = false,
     this.audioBytes,
     this.recordingQuality = 1.0,
+    this.isPlayingAudio = false,
   });
 
   bool get isListening => status == DecoderStatus.listening;
@@ -69,9 +72,8 @@ final class DecoderState {
   bool get canListen =>
       status == DecoderStatus.idle || status == DecoderStatus.result;
 
-  /// Save button is enabled when there is a result from a mic recording and no save yet.
-  bool get canSave =>
-      status == DecoderStatus.result && savedPath == null && !isFileAnalysis;
+  /// Save button is shown whenever audio bytes are available, regardless of source.
+  bool get canSave => audioBytes != null;
 
   /// Share button is enabled once a file has been saved internally.
   bool get canShare => savedPath != null;
@@ -87,6 +89,7 @@ final class DecoderState {
     bool? isFileAnalysis,
     Uint8List? audioBytes,
     double? recordingQuality,
+    bool? isPlayingAudio,
     bool clearSignal = false,
     bool clearError = false,
     bool clearSavedPath = false,
@@ -103,5 +106,6 @@ final class DecoderState {
         isFileAnalysis: isFileAnalysis ?? this.isFileAnalysis,
         audioBytes: clearAudioBytes ? null : (audioBytes ?? this.audioBytes),
         recordingQuality: recordingQuality ?? this.recordingQuality,
+        isPlayingAudio: isPlayingAudio ?? this.isPlayingAudio,
       );
 }
