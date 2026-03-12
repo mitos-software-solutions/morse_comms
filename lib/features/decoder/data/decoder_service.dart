@@ -97,14 +97,14 @@ class DecoderService {
 
   /// Decode the recorded audio offline on a background isolate.
   ///
-  /// Call after [stopListening]. Returns the decoded Morse text.
+  /// Call after [stopListening]. Returns `(decodedText, confidence)`.
   ///
   /// Routes through [OfflineAnalyzer.analyzeWav] so the live recording path
   /// benefits from tone-frequency auto-detection (same as the file-open path).
-  Future<String> analyzeRecording() {
+  Future<(String, double)> analyzeRecording() {
     final wavBytes = buildRecordingWav();
     // 44 bytes = WAV header with no audio data.
-    if (wavBytes.length <= 44) return Future.value('');
+    if (wavBytes.length <= 44) return Future.value(('', 0.0));
     return compute(runOfflineWavAnalysisIsolate, (wavBytes, null));
   }
 
@@ -147,8 +147,8 @@ class DecoderService {
   /// [OfflineAnalyzer.analyzeWav] running on a background isolate.
   /// Tone frequency is auto-detected — no need to know the recording's CW
   /// frequency in advance.
-  /// Returns the decoded text, or an empty string on failure.
-  Future<String> analyzeWavFile(Uint8List wavBytes) {
+  /// Returns `(decodedText, confidence)`.
+  Future<(String, double)> analyzeWavFile(Uint8List wavBytes) {
     // ignore: avoid_print
     print('[MorseDbg] analyzeWavFile: ${wavBytes.length} bytes');
     return compute(runOfflineWavAnalysisIsolate, (wavBytes, null));

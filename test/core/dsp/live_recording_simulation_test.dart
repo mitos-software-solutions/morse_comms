@@ -172,7 +172,7 @@ String decodeWithReverb(
   final roughFloor = sorted[sorted.length ~/ 3];
   final threshold = roughFloor * kSignalRatio;
   final withReverb = _applyReverb(mags, threshold, decayFrames: decayFrames);
-  return OfflineAnalyzer.analyze(withReverb, frameDurationMs);
+  return OfflineAnalyzer.analyze(withReverb, frameDurationMs).$1;
 }
 
 /// Apply a simulated room-reverb tail to Goertzel magnitudes.
@@ -224,7 +224,7 @@ void main() {
         symGapDotRatio: 0.38,
         letGapDotRatio: 3.0, // standard letter gap — only sym gap is compressed
       );
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] ratio=2.25 @3wpm: "$result"');
       expect(result, 'SOS',
           reason: 'Low-WPM non-standard ratio must use bimodal seeded path, '
@@ -239,7 +239,7 @@ void main() {
         symGapDotRatio: 0.7,
         letGapDotRatio: 3.0,
       );
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] ratio=2.0 @5wpm: "$result"');
       expect(result, 'SOS');
     });
@@ -252,7 +252,7 @@ void main() {
         symGapDotRatio: 0.8,
         letGapDotRatio: 3.0,
       );
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] ratio=2.3 @8wpm: "$result"');
       expect(result, 'SOS');
     });
@@ -264,7 +264,7 @@ void main() {
         wpm: 10,
         dashDotRatio: 2.5,
       );
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] ratio=2.5 @10wpm: "$result"');
       expect(result, 'SOS');
     });
@@ -277,7 +277,7 @@ void main() {
         symGapDotRatio: 0.6,
         letGapDotRatio: 3.0,
       );
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] ratio=2.3 SOS SOS @5wpm: "$result"');
       // Word gap may not always produce a space — strip spaces and check chars.
       expect(result.replaceAll(' ', ''), 'SOSSOS',
@@ -298,7 +298,7 @@ void main() {
       final cleanPcm = gen.generate('SOS');
       final pcmWithClick = prependClick(cleanPcm);
       final wav = _pcmToWav(pcmWithClick);
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] click + SOS @20wpm: "$result"');
       expect(result, 'SOS',
           reason: 'Mouse-click transient must not corrupt Morse decoding');
@@ -309,7 +309,7 @@ void main() {
       final cleanPcm = gen.generate('SOS');
       final pcmWithClick = prependClick(cleanPcm, clickDurationMs: 50);
       final wav = _pcmToWav(pcmWithClick);
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] 50ms click + SOS @15wpm: "$result"');
       expect(result, 'SOS');
     });
@@ -320,7 +320,7 @@ void main() {
       final cleanPcm = gen.generate('SOS');
       final pcmWithClick = prependClick(cleanPcm, silenceAfterMs: 0);
       final wav = _pcmToWav(pcmWithClick);
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] click (no gap) + SOS: "$result"');
       // May not decode perfectly, but should not crash or return empty.
       expect(result, isNotEmpty,
@@ -419,7 +419,7 @@ void main() {
       final pcm = gen.generate('SOS');
       final wav = _pcmToWav(pcm);
       // Pass null → auto-detect
-      final result = OfflineAnalyzer.analyzeWav(wav);
+      final result = OfflineAnalyzer.analyzeWav(wav).$1;
       print('[sim] auto-detect 600 Hz: "$result"');
       expect(result, 'SOS',
           reason: 'Auto-detection must pick 600 Hz and decode correctly');
@@ -429,7 +429,7 @@ void main() {
       final gen = SineMorseGenerator(wpm: 20, frequencyHz: 750);
       final pcm = gen.generate('SOS');
       final wav = _pcmToWav(pcm);
-      final result = OfflineAnalyzer.analyzeWav(wav);
+      final result = OfflineAnalyzer.analyzeWav(wav).$1;
       print('[sim] auto-detect 750 Hz: "$result"');
       expect(result, 'SOS');
     });
@@ -438,7 +438,7 @@ void main() {
       final gen = SineMorseGenerator(wpm: 20, frequencyHz: 800);
       final pcm = gen.generate('SOS');
       final wav = _pcmToWav(pcm);
-      final result = OfflineAnalyzer.analyzeWav(wav);
+      final result = OfflineAnalyzer.analyzeWav(wav).$1;
       print('[sim] auto-detect 800 Hz: "$result"');
       expect(result, 'SOS');
     });
@@ -447,7 +447,7 @@ void main() {
       final gen = SineMorseGenerator(wpm: 20, frequencyHz: 450);
       final pcm = gen.generate('SOS');
       final wav = _pcmToWav(pcm);
-      final result = OfflineAnalyzer.analyzeWav(wav);
+      final result = OfflineAnalyzer.analyzeWav(wav).$1;
       print('[sim] auto-detect 450 Hz: "$result"');
       expect(result, 'SOS');
     });
@@ -457,9 +457,9 @@ void main() {
       final pcm = gen.generate('SOS');
       final wav = _pcmToWav(pcm);
 
-      final autoResult = OfflineAnalyzer.analyzeWav(wav); // auto-detect
+      final autoResult = OfflineAnalyzer.analyzeWav(wav).$1; // auto-detect
       final wrongResult =
-          OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 300); // wrong
+          OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 300).$1; // wrong
 
       final autoUseful =
           autoResult.replaceAll('?', '').replaceAll(' ', '').length;
@@ -485,7 +485,7 @@ void main() {
       final gen = SineMorseGenerator(wpm: 15);
       final pcm = stripLeadIn(gen.generate('SOS'));
       final wav = _pcmToWav(pcm);
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] no lead-in @15wpm: "$result"');
       // Without lead-in silence, noise floor estimation is harder.
       // We don't require "SOS" but must produce something non-empty.
@@ -497,7 +497,7 @@ void main() {
       final gen = SineMorseGenerator(wpm: 10);
       final pcm = stripLeadIn(gen.generate('SOS'));
       final wav = _pcmToWav(pcm);
-      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700);
+      final result = OfflineAnalyzer.analyzeWav(wav, targetFrequencyHz: 700).$1;
       print('[sim] no lead-in @10wpm: "$result"');
       final useful = result.replaceAll('?', '').replaceAll(' ', '');
       expect(useful, isNotEmpty,

@@ -55,7 +55,7 @@ String _decodeMsg(
   final frames =
       GoertzelDetector.framesFromPcm16(pcm, SineMorseGenerator.frameSize);
   final magnitudes = frames.map((f) => detector.computePower(f)).toList();
-  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).trim();
+  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).$1.trim();
 }
 
 /// Generates a random Morse message of given length
@@ -240,16 +240,16 @@ void main() {
   // ══════════════════════════════════════════════════════════════════════════
   group('Property 2.7: Edge cases handled correctly', () {
     test('Empty magnitudes return empty string', () {
-      expect(OfflineAnalyzer.analyze([], 11.6), '');
+      expect(OfflineAnalyzer.analyze([], 11.6).$1, '');
     });
 
     test('Short magnitudes return empty string', () {
-      expect(OfflineAnalyzer.analyze(List.filled(9, 0.0), 11.6), '');
+      expect(OfflineAnalyzer.analyze(List.filled(9, 0.0), 11.6).$1, '');
     });
 
     test('Pure silence returns empty string', () {
       final silence = List<double>.filled(500, 0.0);
-      expect(OfflineAnalyzer.analyze(silence, 11.6), '');
+      expect(OfflineAnalyzer.analyze(silence, 11.6).$1, '');
     });
 
     test('Very slow WPM (5 WPM) decodes correctly', () {

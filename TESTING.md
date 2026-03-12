@@ -104,6 +104,24 @@ They live under `test/features/**` and run with the regular `flutter test` comma
     - The “New Recording” app bar action is present.
     - The `Save to Device` button is not shown when there is no decoded result.
 
+- **RecordingQualityBadge widget tests**
+  - File: `test/features/decoder/recording_quality_badge_test.dart`
+  - Tests the `RecordingQualityBadge` widget directly (exposed with `@visibleForTesting`).
+  - Verifies the two quality tiers:
+    - **MED** (`0.7 ≤ quality < 1.0`) — renders `info_outline` icon and `”Recording quality: fair — some segments were unclear”` message. Tested at `0.7` (boundary) and `0.8`.
+    - **LOW** (`quality < 0.7`) — renders `warning_amber_rounded` icon and `”Recording quality: poor — output may be approximate”` message. Tested at `0.69` (just below boundary), `0.3`, and `0.0`.
+  - Verifies the exact `0.7` boundary: `0.699` → LOW, `0.7` → MED.
+  - Verifies the badge is not present in the screen at initial idle state (quality defaults to `1.0`).
+
+- **DecoderState `recordingQuality` tests** (in `decoder_bloc_test.dart`)
+  - Added to the existing `DecoderBloc` test group under `recordingQuality`:
+    - Default `recordingQuality` is `1.0` (HIGH — badge hidden).
+    - `copyWith` updates and preserves `recordingQuality` correctly.
+    - Quality `>= 1.0` satisfies the hide-badge condition.
+    - Quality `0.7` (MED boundary) and `0.8` are NOT low (`< 0.7` is false).
+    - Quality `0.69` (just below threshold) and `0.0` ARE low.
+    - Badge is not shown when `status != result` even if quality is low (guards `hasResult && quality < 1.0`).
+
 - **Learn / Lessons widget tests**
   - File: `test/features/lessons/lessons_screen_test.dart`
   - Builds `LessonsScreen` with:

@@ -27,7 +27,7 @@ String _decodeMsg(String message, {required int wpm, double? snrDb,
   final frames =
       GoertzelDetector.framesFromPcm16(pcm, SineMorseGenerator.frameSize);
   final magnitudes = frames.map((f) => detector.computePower(f)).toList();
-  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).trim();
+  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).$1.trim();
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -93,14 +93,14 @@ void main() {
 
   // ── 5. Magnitudes too short — should return empty gracefully ──────────────────
   test('OfflineAnalyzer — empty/short magnitudes return empty string', () {
-    expect(OfflineAnalyzer.analyze([], 11.6), '');
-    expect(OfflineAnalyzer.analyze(List.filled(9, 0.0), 11.6), '');
+    expect(OfflineAnalyzer.analyze([], 11.6).$1, '');
+    expect(OfflineAnalyzer.analyze(List.filled(9, 0.0), 11.6).$1, '');
   });
 
   // ── 6. Pure silence — should return empty gracefully ─────────────────────────
   test('OfflineAnalyzer — pure silence returns empty string', () {
     final silence = List<double>.filled(500, 0.0);
-    final result = OfflineAnalyzer.analyze(silence, 11.6);
+    final result = OfflineAnalyzer.analyze(silence, 11.6).$1;
     expect(result, '');
   });
 

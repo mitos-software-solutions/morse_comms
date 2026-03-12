@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -281,6 +280,22 @@ class _DecoderView extends StatelessWidget {
                   );
                 },
               ),
+            ),
+
+            // ── Recording quality badge ───────────────────────────────
+            BlocBuilder<DecoderBloc, DecoderState>(
+              buildWhen: (p, c) =>
+                  p.recordingQuality != c.recordingQuality ||
+                  p.status != c.status,
+              builder: (context, state) {
+                if (!state.hasResult || state.recordingQuality >= 1.0) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: RecordingQualityBadge(quality: state.recordingQuality),
+                );
+              },
             ),
             const SizedBox(height: 24),
 
@@ -599,6 +614,56 @@ class _AudioPlayButtonState extends State<_AudioPlayButton> {
       onPressed: _isPlaying ? _stop : _play,
       style: IconButton.styleFrom(
         padding: const EdgeInsets.all(12),
+      ),
+    );
+  }
+}
+
+// ── Recording quality badge ───────────────────────────────────────────────────
+
+/// Badge displayed below the decoded-text box when analysis confidence is below 1.0.
+///
+/// Exposed for widget tests via `@visibleForTesting`.
+@visibleForTesting
+class RecordingQualityBadge extends StatelessWidget {
+  final double quality;
+  const RecordingQualityBadge({super.key, required this.quality});
+
+  @override
+  Widget build(BuildContext context) {
+    final isLow = quality < 0.7;
+    final colorScheme = Theme.of(context).colorScheme;
+    final bgColor = isLow
+        ? colorScheme.errorContainer
+        : colorScheme.tertiaryContainer;
+    final fgColor = isLow
+        ? colorScheme.onErrorContainer
+        : colorScheme.onTertiaryContainer;
+    final icon = isLow ? Icons.warning_amber_rounded : Icons.info_outline;
+    final label = isLow
+        ? 'Recording quality: poor — output may be approximate'
+        : 'Recording quality: fair — some segments were unclear';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: fgColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: fgColor),
+            ),
+          ),
+        ],
       ),
     );
   }

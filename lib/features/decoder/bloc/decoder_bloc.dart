@@ -86,8 +86,8 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
     emit(state.copyWith(status: DecoderStatus.analyzing, clearSignal: true));
 
     try {
-      final text = await _service.analyzeRecording();
-      add(_AnalysisCompleted(text));
+      final (text, confidence) = await _service.analyzeRecording();
+      add(_AnalysisCompleted(text, confidence));
     } catch (e) {
       add(_ErrorOccurred(e.toString()));
     }
@@ -143,8 +143,8 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
       clearAudioBytes: true,
     ));
     try {
-      final text = await _service.analyzeWavFile(event.wavBytes);
-      add(_AnalysisCompleted(text));
+      final (text, confidence) = await _service.analyzeWavFile(event.wavBytes);
+      add(_AnalysisCompleted(text, confidence));
     } catch (e) {
       add(_ErrorOccurred(e.toString()));
     }
@@ -180,6 +180,7 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
       status: DecoderStatus.result,
       decodedText: event.text,
       audioBytes: audioBytes,
+      recordingQuality: event.confidence,
     ));
   }
 

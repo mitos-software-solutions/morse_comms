@@ -47,7 +47,7 @@ String _norm(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
 
 String _decodeFile(String path, {double targetFrequencyHz = 700.0}) {
   final bytes = Uint8List.fromList(File(path).readAsBytesSync());
-  return _norm(OfflineAnalyzer.analyzeWav(bytes, targetFrequencyHz: targetFrequencyHz));
+  return _norm(OfflineAnalyzer.analyzeWav(bytes, targetFrequencyHz: targetFrequencyHz).$1);
 }
 
 void main() {

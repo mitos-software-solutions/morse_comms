@@ -50,7 +50,7 @@ String _decodeMsg(
   final frames =
       GoertzelDetector.framesFromPcm16(pcm, SineMorseGenerator.frameSize);
   final magnitudes = frames.map((f) => detector.computePower(f)).toList();
-  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).trim();
+  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).$1.trim();
 }
 
 /// Generates multi-speed recording by concatenating messages at different WPMs
@@ -78,7 +78,7 @@ String _decodeMultiSpeedPcm(Int16List pcm, {double frequencyHz = 700.0}) {
   final frames =
       GoertzelDetector.framesFromPcm16(pcm, SineMorseGenerator.frameSize);
   final magnitudes = frames.map((f) => detector.computePower(f)).toList();
-  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).trim();
+  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).$1.trim();
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

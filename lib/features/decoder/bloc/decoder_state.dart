@@ -44,6 +44,10 @@ final class DecoderState {
   /// mic recording). Non-null once analysis completes; used for preview playback.
   final Uint8List? audioBytes;
 
+  /// Recording quality confidence [0.0–1.0] from the offline analyzer.
+  /// 1.0 = HIGH (not shown), 0.7 = MED (subtle badge), below 0.7 = LOW (prominent badge).
+  final double recordingQuality;
+
   const DecoderState({
     this.status = DecoderStatus.idle,
     this.decodedText = '',
@@ -54,6 +58,7 @@ final class DecoderState {
     this.errorMessage,
     this.isFileAnalysis = false,
     this.audioBytes,
+    this.recordingQuality = 1.0,
   });
 
   bool get isListening => status == DecoderStatus.listening;
@@ -81,6 +86,7 @@ final class DecoderState {
     String? errorMessage,
     bool? isFileAnalysis,
     Uint8List? audioBytes,
+    double? recordingQuality,
     bool clearSignal = false,
     bool clearError = false,
     bool clearSavedPath = false,
@@ -96,5 +102,6 @@ final class DecoderState {
         errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
         isFileAnalysis: isFileAnalysis ?? this.isFileAnalysis,
         audioBytes: clearAudioBytes ? null : (audioBytes ?? this.audioBytes),
+        recordingQuality: recordingQuality ?? this.recordingQuality,
       );
 }

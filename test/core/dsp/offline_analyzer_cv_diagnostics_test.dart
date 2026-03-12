@@ -21,7 +21,7 @@ const _dir = 'scripts/test_wavs/custom_wavs';
 
 String _decodeFile(String path, {double targetFrequencyHz = 700.0}) {
   final bytes = Uint8List.fromList(File(path).readAsBytesSync());
-  return OfflineAnalyzer.analyzeWav(bytes, targetFrequencyHz: targetFrequencyHz).trim();
+  return OfflineAnalyzer.analyzeWav(bytes, targetFrequencyHz: targetFrequencyHz).$1.trim();
 }
 
 void main() {

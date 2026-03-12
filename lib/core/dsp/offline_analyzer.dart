@@ -100,13 +100,14 @@ class OfflineAnalyzer {
   /// signal-to-noise ratio.  Pass an explicit value to override auto-detection
   /// (useful in tests and when the tone frequency is known in advance).
   ///
-  /// Returns the decoded text, or an empty string if the WAV cannot be parsed.
-  static String analyzeWav(
+  /// Returns the decoded text and recording quality confidence [0.0–1.0],
+  /// or `('', 0.0)` if the WAV cannot be parsed.
+  static (String, double) analyzeWav(
     Uint8List bytes, {
     double? targetFrequencyHz,
   }) {
     final parsed = _parseWav(bytes);
-    if (parsed == null) return '';
+    if (parsed == null) return ('', 0.0);
     final (pcm, sampleRate) = parsed;
 
     final freq = targetFrequencyHz ??
@@ -223,9 +224,10 @@ class OfflineAnalyzer {
   /// [magnitudes] — one value per audio frame.
   /// [frameDurationMs] — duration of one frame in milliseconds.
   ///
-  /// Returns the decoded text. Undecodable segments are represented as '?'.
-  static String analyze(List<double> magnitudes, double frameDurationMs) {
-    if (magnitudes.length < 10) return '';
+  /// Returns the decoded text and recording quality confidence [0.0–1.0].
+  /// Undecodable segments are represented as '?'.
+  static (String, double) analyze(List<double> magnitudes, double frameDurationMs) {
+    if (magnitudes.length < 10) return ('', 0.0);
 
     // ── Step 1: global two-pass noise floor ──────────────────────────────────
     final sorted = List<double>.from(magnitudes)..sort();
@@ -250,7 +252,7 @@ class OfflineAnalyzer {
 
     // ── Step 2: debounced ON/OFF events ──────────────────────────────────────
     final allEvents = _extractEvents(magnitudes, frameDurationMs, threshold);
-    if (allEvents.isEmpty) return '';
+    if (allEvents.isEmpty) return ('', 0.0);
 
     // ── Step 3: segment splitting ────────────────────────────────────────────
     final segments = _splitSegments(allEvents, _segmentBreakMs);
@@ -269,15 +271,19 @@ class OfflineAnalyzer {
     final minOnMs = frameDurationMs * 2.5;
 
     final parts = <String>[];
+    double minConfidence = 1.0;
     for (int i = 0; i < segments.length; i++) {
-      final text = _analyzeSegment(segments[i], frameDurationMs, minOnMs, i);
-      if (text.isNotEmpty) parts.add(text);
+      final (text, conf) = _analyzeSegment(segments[i], frameDurationMs, minOnMs, i);
+      if (text.isNotEmpty) {
+        parts.add(text);
+        minConfidence = min(minConfidence, conf);
+      }
     }
 
     final result = parts.join(' ').trim();
     // ignore: avoid_print
-    print('[MorseDbg] OfflineAnalyzer result: "$result"');
-    return result;
+    print('[MorseDbg] OfflineAnalyzer result: "$result" confidence=${_confidenceLabel(minConfidence)}');
+    return (result, parts.isEmpty ? 0.0 : minConfidence);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
@@ -306,32 +312,9 @@ class OfflineAnalyzer {
     }
   }
 
-  /// Calculate confidence score for a dash:dot ratio.
-  ///
-  /// Returns a confidence score (0.0-1.0) indicating how reliable the
-  /// bimodal split is based on how close the ratio is to the ideal 3:1:
-  ///   - Ratio 2.5-3.5 (±17% of 3.0): High confidence (1.0)
-  ///   - Ratio 2.0-2.5 or 3.5-4.5: Medium confidence (0.7)
-  ///   - Ratio < 2.0 or > 4.5: Low confidence (0.3)
-  ///
-  /// This is used to decide between seeded path (high confidence) vs.
-  /// gap threshold measurement (medium confidence) vs. adaptive bootstrap
-  /// or '?' output (low confidence).
-  static double _calculateRatioConfidence(double ratio) {
-    if (ratio >= 2.5 && ratio <= 3.5) {
-      // Near ideal 3:1 ratio - high confidence
-      return 1.0;
-    } else if ((ratio >= 2.0 && ratio < 2.5) || (ratio > 3.5 && ratio <= 4.5)) {
-      // Boundary ratios - medium confidence
-      return 0.7;
-    } else {
-      // Outside valid range - low confidence
-      return 0.3;
-    }
-  }
-
-  /// Analyse one segment and return decoded text, '?', or ''.
-  static String _analyzeSegment(
+  /// Analyse one segment and return `(decodedText, confidence)`.
+  /// confidence ∈ [0.0, 1.0]: 1.0 = HIGH, 0.7 = MED, 0.5 = adaptive, 0.0 = noise/'?'.
+  static (String, double) _analyzeSegment(
     List<(bool, double)> seg,
     double frameDurationMs,
     double minOnMs,
@@ -341,7 +324,7 @@ class OfflineAnalyzer {
     final onDurs =
         seg.where((e) => e.$1 && e.$2 >= minOnMs).map((e) => e.$2).toList();
 
-    if (onDurs.isEmpty) return ''; // pure silence
+    if (onDurs.isEmpty) return ('', 1.0); // pure silence — not counted
 
     // Strip trailing OFF event before decoding.
     // A trailing silence at the end of the segment can mislead the adaptive
@@ -365,11 +348,62 @@ class OfflineAnalyzer {
       // ignore: avoid_print
       print('[MorseDbg] Segment $idx: ${onDurs.length} ON events'
           ' (< $_minOnEvents) → adaptive bootstrap');
-      return _decodeAdaptive(decodeSeg);
+      return (_decodeAdaptive(decodeSeg), 0.5);
     }
 
-    final (dotMs, dashMs, valid) = _robustBimodalSplit(onDurs);
+    // ── Pass 1: pre-bimodal transient filter ─────────────────────────────────
+    // Remove ON events shorter than 3×frameDurationMs from the list used for
+    // bimodal analysis.  Clicks, RF pops, and microphone taps typically last
+    // only 2–3 Goertzel frames (21–35ms at 44.1 kHz / 512 samples), while the
+    // minimum genuine dot at 40 WPM (Goertzel-inflated) is ≈42ms.
+    //
+    // Filtering only the duration list — not the event sequence — means OFFs
+    // are never merged at this stage, so the gap structure is unchanged.
+    //
+    // Falls back to the unfiltered list if too many events are removed (e.g.
+    // high-WPM recording where dots legitimately approach 3×frameDuration).
+    final preFilterThresholdMs = frameDurationMs * 3.0;
+    final bimodalOnDurs =
+        onDurs.where((d) => d >= preFilterThresholdMs).toList();
+    final onDursForBimodal =
+        bimodalOnDurs.length >= _minOnEvents ? bimodalOnDurs : onDurs;
+    final preFilterCount = onDurs.length - onDursForBimodal.length;
+    if (preFilterCount > 0) {
+      // ignore: avoid_print
+      print('[MorseDbg] Segment $idx: $preFilterCount pre-bimodal transient(s)'
+          ' removed (< ${preFilterThresholdMs.toStringAsFixed(1)}ms)');
+    }
+
+    var (dotMs, dashMs, valid) = _robustBimodalSplit(onDursForBimodal);
+
+    // Small-segment soft bimodal: for 4–7 ON events, if the standard bimodal
+    // fails, retry with a relaxed minimum ratio (1.5 vs standard 1.8).
+    //
+    // Short recordings and sub-segments from speed-split segments often have
+    // compressed ratios (1.5–1.8) due to recording artifacts, operator fist,
+    // or too few split candidates to reach the 1.8 floor.  A second attempt
+    // avoids unnecessary '?' for borderline small segments while still
+    // rejecting genuine noise (ratio < 1.5).
+    if (!valid && onDurs.length <= 7) {
+      final (rDotMs, rDashMs, rValid) = _robustBimodalSplit(
+        onDursForBimodal,
+        minRatio: 1.5,
+      );
+      if (rValid) {
+        dotMs = rDotMs;
+        dashMs = rDashMs;
+        valid = true;
+        // ignore: avoid_print
+        print('[MorseDbg] Segment $idx: small-segment soft bimodal'
+            ' (relaxed minRatio=1.5) accepted'
+            ' dotMs=${dotMs.toStringAsFixed(1)}'
+            ' dashMs=${dashMs.toStringAsFixed(1)}'
+            ' ratio=${dotMs > 0 ? (dashMs / dotMs).toStringAsFixed(2) : "?"}');
+      }
+    }
+
     final ratio = dotMs > 0 ? dashMs / dotMs : 0.0;
+    final confidence = _calculateRatioConfidence(ratio);
 
     // ignore: avoid_print
     print('[MorseDbg] Segment $idx: ${seg.length} events'
@@ -377,13 +411,14 @@ class OfflineAnalyzer {
         ' dotMs=${dotMs.toStringAsFixed(1)}'
         ' dashMs=${dashMs.toStringAsFixed(1)}'
         ' ratio=${ratio.toStringAsFixed(2)}'
+        ' confidence=${_confidenceLabel(confidence)}'
         ' valid=$valid');
 
-    if (!valid) return '?';
+    if (!valid) return ('?', 0.0);
 
     // For ratios at or below [_seedRatioThreshold] AND very short dots
     // (high WPM ≥ 25 WPM), the Goertzel power-lingering effect inflates the
-    // measured dot duration enough that the old 2×dot letter-gap threshold
+    // measured dot duration enough that the 2×dot letter-gap threshold
     // misfires.  The adaptive bootstrap derives timing from the first ON+gap
     // pair and is not subject to this inflation — use it for these fast,
     // borderline-ratio recordings.
@@ -392,72 +427,71 @@ class OfflineAnalyzer {
     // (≥ 15 WPM, even with reverb-inflated dotMs) to reach the seeded path,
     // where [_findGapThreshold] measures the actual sym/letter boundary from
     // the observed OFF-event distribution.  This is immune to Goertzel reverb
-    // inflation — the seeded path is now safer than adaptive for ≥ 15 WPM.
+    // inflation — the seeded path is safer than adaptive for ≥ 15 WPM.
     //
     // At truly high WPM (≥ 25 WPM, dotMs < 90 ms), the gap-threshold search
     // has too few frames to be reliable; adaptive bootstrap is more robust.
     //
     // NOTE: the boundary is inclusive (<=) because at 35 WPM the bimodal
-    // produces exactly ratio=2.50, and the old seeded path would misclassify
+    // produces exactly ratio=2.50, and the seeded path would misclassify
     // the letter gap; adaptive is still correct for that speed.
-    //
-    // NEW: Use confidence scoring for boundary ratios (2.0-2.5). Medium
-    // confidence ratios should use gap threshold measurement when available,
-    // falling back to adaptive bootstrap if gap threshold cannot be found.
-    final confidence = _calculateRatioConfidence(ratio);
-    
     if (ratio <= _seedRatioThreshold && dotMs < 90.0) {
       // Low ratio + high WPM: use adaptive bootstrap
       // ignore: avoid_print
-      print('[MorseDbg] Low ratio ($ratio) + high WPM (dotMs=${dotMs.toStringAsFixed(1)}ms)'
+      print('[MorseDbg] Low ratio (${ratio.toStringAsFixed(2)})'
+          ' + high WPM (dotMs=${dotMs.toStringAsFixed(1)}ms)'
           ' → adaptive bootstrap');
-      return _decodeAdaptive(decodeSeg);
-    }
-    
-    // For medium confidence ratios (2.0-2.5), try to find gap threshold first.
-    // If gap threshold cannot be found, fall back to adaptive bootstrap which
-    // is more robust for these boundary cases than seeded path with default 2×dot.
-    if (confidence == 0.7) {
-      // Medium confidence - check if gap threshold can be found
-      final interiorOffDursCheck = <double>[];
-      bool seenOnCheck = false;
-      for (final (isOn, ms) in trimmed) {
-        if (isOn) {
-          seenOnCheck = true;
-        } else if (seenOnCheck) {
-          interiorOffDursCheck.add(ms);
-        }
-      }
-      final gapThresholdCheck = _findGapThreshold(interiorOffDursCheck, dotMs);
-      
-      if (gapThresholdCheck == null) {
-        // Gap threshold not found - use adaptive bootstrap for boundary ratios
-        // ignore: avoid_print
-        print('[MorseDbg] Medium confidence ratio ($ratio), no gap threshold'
-            ' → adaptive bootstrap');
-        return _decodeAdaptive(decodeSeg);
-      }
-      // Gap threshold found - continue to seeded path below
+      return (_decodeAdaptive(decodeSeg), 0.5);
     }
 
+    // All other cases — including boundary ratios (2.0–2.5) at medium WPM —
+    // use the seeded path with bimodal timing.
+    //
+    // IMPORTANT: do NOT fall back to adaptive bootstrap when gap threshold
+    // detection fails.  When bimodal succeeds (valid=true, ratio in range,
+    // CV in range), the bootstrap produces worse results than a seeded decode
+    // with the ITU 2×dot default, because bootstrapFromGap() anchors on the
+    // first event pair which may be a dash+symbol-gap → ratio ≈ 10 on real
+    // recordings.  The seeded path below calls _findGapThreshold and passes
+    // null to _decodeSeeded when no gap is found; _decodeSeeded then uses
+    // 2×dotMs as the letter-gap threshold, which is correct for standard Morse.
+
+    // ── Pass 2: post-bimodal isolation check ─────────────────────────────────
+    // Now that dotMs is known, remove ON events that are:
+    //   (a) shorter than 0.5×dotMs — well below the minimum genuine dot, AND
+    //   (b) isolated — surrounded by gaps ≥ 2×dotMs on BOTH sides
+    //
+    // A genuine short dot inside dense Morse has a symbol gap (≈1×dotMs) on
+    // at least one side, so it will NOT meet criterion (b).  An isolated click
+    // (wideband pop, keyboard tap) that slipped through the pre-bimodal filter
+    // will typically sit in a sea of silence and satisfy both criteria.
+    //
+    // This is applied to `trimmed` (not seededSeg) so that the gap structure
+    // seen by _findGapThreshold is correct: we only remove truly isolated
+    // events, not every event below a fixed threshold.
+    final deTransiented = _filterTransientsIsolated(trimmed, dotMs);
+
     // For the seeded path dotMs is known, so use WPM-aware filtering.
-    // This catches clicks whose apparent duration (due to a partial Goertzel
-    // frame staying above threshold) exceeds the base minOnMs but is still
-    // clearly below any genuine Morse element.
     // WPM-aware threshold adapts to speed: 2.5× at low WPM, 1.5× at high WPM.
     final wpmAwareMinOnMs = _calculateMinOnMs(dotMs, frameDurationMs);
-    // Also apply 70% of dot as secondary filter for transients
+    // Also apply 70% of dot as secondary filter for remaining transients.
     final seededMinOnMs = max(wpmAwareMinOnMs, dotMs * 0.7);
-    final seededSeg = _filterShortOns(trimmed, seededMinOnMs);
+    final seededSeg = _filterShortOns(deTransiented, seededMinOnMs);
 
     // Measure the actual gap-cluster boundary from the interior OFF events.
     // Room reverb inflates dotMs (and raises the 2×dot letter-gap threshold)
     // while simultaneously compressing the measured letter gaps.  Using the
     // midpoint between the two observed gap clusters as the letter threshold
     // makes classification immune to this reverb-induced drift.
+    //
+    // Use deTransiented (isolation-filtered) for gap detection: it preserves
+    // the full gap structure of legitimate Morse while removing isolated
+    // transient bursts that would otherwise inflate the upper OFF cluster.
+    // Using seededSeg would risk collapsing the OFF distribution (via
+    // _filterShortOns merging OFFs) — see P1 fix notes.
     final interiorOffDurs = <double>[];
     bool seenOn = false;
-    for (final (isOn, ms) in seededSeg) {
+    for (final (isOn, ms) in deTransiented) {
       if (isOn) {
         seenOn = true;
       } else if (seenOn) {
@@ -466,13 +500,56 @@ class OfflineAnalyzer {
     }
     final gapThresholdMs = _findGapThreshold(interiorOffDurs, dotMs);
 
-    return _decodeSeeded(seededSeg, dotMs, dashMs, gapThresholdMs: gapThresholdMs);
+    return (_decodeSeeded(seededSeg, dotMs, dashMs, gapThresholdMs: gapThresholdMs), confidence);
   }
 
   /// Decode using adaptive bootstrap (no pre-seeded timing).
-  /// Delegates entirely to [MorseDecoder]'s gap-ratio bootstrap.
+  ///
+  /// Applies a **percentile pre-seed** when ≥ 4 ON events are present:
+  /// sorts all ON durations, uses the bottom third as dot candidates and the
+  /// top third as dash candidates, and seeds [MorseDecoder] with their medians
+  /// before the event loop starts.
+  ///
+  /// This avoids the single-pair anchoring problem of
+  /// [AdaptiveTiming.bootstrapFromGap], which can produce a ratio ≈ 10 if the
+  /// first event is a dash followed by a symbol gap (observed: 213ms dash /
+  /// 21ms symbol gap = ratio 10.14 on yt2.wav before the P1 fix routed valid
+  /// bimodal segments away from adaptive).
+  ///
+  /// Falls back to the original gap-ratio bootstrap (no pre-seed) when:
+  ///   - Fewer than 4 ON events (too few for a reliable percentile estimate).
+  ///   - The derived ratio is outside [1.5, 5.0] (degenerate split — all
+  ///     events are the same duration, or the distribution is unimodal noise).
   static String _decodeAdaptive(List<(bool, double)> events) {
     final decoder = MorseDecoder();
+
+    // Percentile pre-seed: bottom-third medians → dotEst, top-third → dashEst.
+    // Using thirds (not halves) keeps dot candidates in the lower cluster and
+    // dash candidates in the upper cluster for typical Morse content mixes
+    // (≥ 50 % dots in most messages), while still including ≥ 1 element per
+    // cluster for small event counts.
+    final onDurs = events.where((e) => e.$1).map((e) => e.$2).toList()..sort();
+    if (onDurs.length >= 4) {
+      final n = onDurs.length;
+      final third = max(1, n ~/ 3);
+      final dotEst = _median(onDurs.sublist(0, third));
+      final dashEst = _median(onDurs.sublist(n - third));
+      final pRatio = dotEst > 0 ? dashEst / dotEst : 0.0;
+      if (pRatio >= 1.5 && pRatio <= 5.0) {
+        decoder.timing.seed(dotEst, dashEst);
+        // ignore: avoid_print
+        print('[MorseDbg] _decodeAdaptive: percentile-seed'
+            ' dotMs=${dotEst.toStringAsFixed(1)}'
+            ' dashMs=${dashEst.toStringAsFixed(1)}'
+            ' ratio=${pRatio.toStringAsFixed(2)}'
+            ' ($n events, third=$third)');
+      } else {
+        // ignore: avoid_print
+        print('[MorseDbg] _decodeAdaptive: percentile-seed rejected'
+            ' ratio=${pRatio.toStringAsFixed(2)} → bootstrapFromGap');
+      }
+    }
+
     for (final (isOn, ms) in events) {
       decoder.processEvent(on: isOn, durationMs: ms.round());
     }
@@ -528,11 +605,16 @@ class OfflineAnalyzer {
         // First large relative jump → sym/letter boundary.
         final threshold = (left + sorted[i]) / 2.0;
         
-        // Validation: threshold must be between 1.0×dotMs and 4.0×dotMs
-        // Lower bound relaxed to 1.0× to handle compressed letter gaps at
-        // high WPM with low ratios (e.g., 30 WPM with ratio=2.20).
+        // Validation: threshold must be between 0.5×dotMs and 4.0×dotMs.
+        // Lower bound is 0.5× (not 1.0×) because Goertzel power-lingering
+        // inflates the bimodal dotMs while leaving OFF-event durations
+        // unaffected.  When symbol gaps are compressed to 2–3 frames (21–43ms)
+        // and letter gaps remain at their true duration (~267ms), the midpoint
+        // threshold can be well below the inflated dotMs.  A 0.5× lower bound
+        // still rejects degenerate cases (threshold < half a dot) while
+        // accepting real gap boundaries in compressed-gap recordings.
         // Upper bound at 4.0× handles YouTube recordings with reverb.
-        if (threshold < dotMs * 1.0 || threshold > dotMs * 4.0) continue;
+        if (threshold < dotMs * 0.5 || threshold > dotMs * 4.0) continue;
         
         // ignore: avoid_print
         print('[MorseDbg] gapThreshold: ${threshold.toStringAsFixed(1)}ms'
@@ -547,8 +629,11 @@ class OfflineAnalyzer {
   }
 
   /// Find the split of sorted [onDurs] whose upper/lower-median ratio is
-  /// closest to 3.0, subject to ratio ∈ [_minRatio, _maxRatio] and
+  /// closest to 3.0, subject to ratio ∈ [[minRatio], [maxRatio]] and
   /// within-cluster CV ≤ [_maxClusterCv].
+  ///
+  /// [minRatio] defaults to [_minRatio] (1.8). Pass a lower value (e.g. 1.5)
+  /// for short segments where compression may squeeze the ratio below 1.8.
   ///
   /// For ratios very close to the ideal 3:1 (within ±10%), relaxes the CV
   /// threshold to 0.70 to accommodate YouTube recordings with compression
@@ -556,7 +641,10 @@ class OfflineAnalyzer {
   /// Morse structure.
   ///
   /// Returns `(dotMs, dashMs, isValid)`.
-  static (double, double, bool) _robustBimodalSplit(List<double> onDurs) {
+  static (double, double, bool) _robustBimodalSplit(
+    List<double> onDurs, {
+    double minRatio = _minRatio,
+  }) {
     if (onDurs.isEmpty) return (60.0, 180.0, false);
 
     final s = List<double>.from(onDurs)..sort();
@@ -574,7 +662,7 @@ class OfflineAnalyzer {
       if (lowerMed <= 0 || upperMed <= 0) continue;
 
       final ratio = upperMed / lowerMed;
-      if (ratio < _minRatio || ratio > _maxRatio) continue;
+      if (ratio < minRatio || ratio > _maxRatio) continue;
 
       // Each cluster must have consistent timing.
       final lowerCv = _cv(lower);
@@ -867,6 +955,94 @@ class OfflineAnalyzer {
     return result;
   }
 
+  /// Remove isolated transient ON events from an event sequence.
+  ///
+  /// An event is treated as a transient when ALL three criteria are met:
+  ///   1. It is an ON event shorter than 0.5 × [dotMs]
+  ///      (well below the minimum genuine dot at this WPM).
+  ///   2. The OFF event immediately before it is ≥ 2 × [dotMs]
+  ///      (a letter or word gap — the transient is not part of a Morse run).
+  ///   3. The OFF event immediately after it is ≥ 2 × [dotMs]
+  ///      (same reasoning on the trailing side).
+  ///
+  /// Genuine short dots inside dense Morse always have a symbol gap (≈1×dotMs)
+  /// on at least one side, so they will NOT satisfy criteria 2 and 3.
+  /// Isolated wideband bursts — clicks, RF pops, microphone taps — that slipped
+  /// through the pre-bimodal frame-rate filter will typically sit in a sea of
+  /// silence and satisfy all three criteria.
+  ///
+  /// Matching events are replaced with OFF events of the same duration and
+  /// adjacent OFFs are merged (same contract as [_filterShortOns]).
+  static List<(bool, double)> _filterTransientsIsolated(
+    List<(bool, double)> events,
+    double dotMs,
+  ) {
+    final threshold = dotMs * 0.5;
+    final isolationGap = dotMs * 2.0;
+
+    final result = List<(bool, double)>.from(events);
+    int removed = 0;
+
+    for (int i = 0; i < result.length; i++) {
+      final (isOn, ms) = result[i];
+      if (!isOn || ms >= threshold) continue;
+
+      // Check for a long gap immediately before this event.
+      final gapBefore = (i > 0 && !result[i - 1].$1) ? result[i - 1].$2 : 0.0;
+      // Check for a long gap immediately after this event.
+      final gapAfter = (i < result.length - 1 && !result[i + 1].$1)
+          ? result[i + 1].$2
+          : 0.0;
+
+      if (gapBefore >= isolationGap && gapAfter >= isolationGap) {
+        result[i] = (false, ms); // convert to silence
+        removed++;
+      }
+    }
+
+    if (removed == 0) return events; // fast path: nothing changed
+
+    // ignore: avoid_print
+    print('[MorseDbg] _filterTransientsIsolated: $removed isolated transient(s)'
+        ' removed (threshold=${threshold.toStringAsFixed(1)}ms,'
+        ' isolationGap=${isolationGap.toStringAsFixed(1)}ms)');
+
+    // Merge consecutive OFF events produced by the conversion above.
+    final merged = <(bool, double)>[];
+    for (final event in result) {
+      if (merged.isNotEmpty && merged.last.$1 == event.$1) {
+        merged[merged.length - 1] = (event.$1, merged.last.$2 + event.$2);
+      } else {
+        merged.add(event);
+      }
+    }
+    return merged;
+  }
+
+  /// Confidence score for a bimodal ratio.
+  ///
+  /// | Score | Ratio range      | Meaning                              |
+  /// |-------|------------------|--------------------------------------|
+  /// | 1.0   | 2.5–3.5          | High — near-ideal 3:1 Morse ratio    |
+  /// | 0.7   | 1.8–2.5 or 3.5–4.5 | Medium — valid but compressed/wide |
+  /// | 0.3   | 1.5–1.8 (soft)   | Low — relaxed small-segment path     |
+  ///
+  /// Low-confidence segments still decode via the seeded path (P1 guarantees
+  /// bimodal success → seeded, never bootstrap).  Confidence is used for
+  /// logging and future adaptive tuning only.
+  static double _calculateRatioConfidence(double ratio) {
+    if (ratio >= 2.5 && ratio <= 3.5) return 1.0;
+    if (ratio >= 1.8 && ratio <= 4.5) return 0.7;
+    return 0.3; // soft-bimodal path (ratio 1.5–1.8) or degenerate
+  }
+
+  /// Human-readable label for a confidence score.
+  static String _confidenceLabel(double confidence) {
+    if (confidence >= 1.0) return 'HIGH';
+    if (confidence >= 0.7) return 'MED';
+    return 'LOW';
+  }
+
   /// Median of a pre-sorted list.
   static double _median(List<double> sorted) {
     if (sorted.isEmpty) return 0.0;
@@ -893,7 +1069,8 @@ class OfflineAnalyzer {
 /// on a background isolate without blocking the UI thread.
 ///
 /// [args.$1] — magnitudes list, [args.$2] — frameDurationMs.
-String runOfflineAnalysisIsolate((List<double>, double) args) =>
+/// Returns `(decodedText, confidence)`.
+(String, double) runOfflineAnalysisIsolate((List<double>, double) args) =>
     OfflineAnalyzer.analyze(args.$1, args.$2);
 
 /// Top-level wrapper used by [compute()] to run [OfflineAnalyzer.analyzeWav]
@@ -901,5 +1078,6 @@ String runOfflineAnalysisIsolate((List<double>, double) args) =>
 ///
 /// [args.$1] — raw WAV bytes.
 /// [args.$2] — Goertzel target frequency in Hz, or null to auto-detect.
-String runOfflineWavAnalysisIsolate((Uint8List, double?) args) =>
+/// Returns `(decodedText, confidence)`.
+(String, double) runOfflineWavAnalysisIsolate((Uint8List, double?) args) =>
     OfflineAnalyzer.analyzeWav(args.$1, targetFrequencyHz: args.$2);

@@ -35,10 +35,11 @@ final class _SignalUpdated extends DecoderEvent {
   _SignalUpdated(this.snapshot);
 }
 
-/// Offline analysis completed; carries the decoded text.
+/// Offline analysis completed; carries the decoded text and confidence.
 final class _AnalysisCompleted extends DecoderEvent {
   final String text;
-  _AnalysisCompleted(this.text);
+  final double confidence;
+  _AnalysisCompleted(this.text, this.confidence);
 }
 
 /// WAV file saved successfully; carries the full file path.

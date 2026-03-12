@@ -75,7 +75,7 @@ String _decode(
   final frames =
       GoertzelDetector.framesFromPcm16(pcm, SineMorseGenerator.frameSize);
   final magnitudes = frames.map((f) => detector.computePower(f)).toList();
-  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).trim();
+  return OfflineAnalyzer.analyze(magnitudes, detector.frameDurationMs).$1.trim();
 }
 
 /// Runs [trials] decodes with different random seeds and counts correct ones.

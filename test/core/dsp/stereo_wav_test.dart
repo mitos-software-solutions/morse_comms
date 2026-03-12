@@ -55,7 +55,7 @@ String? _decode(String path, {double targetFrequencyHz = 700.0}) {
   final bytes = Uint8List.fromList(file.readAsBytesSync());
   final result = OfflineAnalyzer.analyzeWav(bytes,
       targetFrequencyHz: targetFrequencyHz);
-  return _norm(result);
+  return _norm(result.$1);
 }
 
 void main() {

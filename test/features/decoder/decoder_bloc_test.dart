@@ -285,6 +285,79 @@ void main() {
       });
     });
 
+    group('recordingQuality', () {
+      test('initial recordingQuality is 1.0 (HIGH)', () {
+        const state = DecoderState();
+        expect(state.recordingQuality, equals(1.0));
+      });
+
+      test('copyWith updates recordingQuality', () {
+        const state = DecoderState();
+        final updated = state.copyWith(recordingQuality: 0.5);
+        expect(updated.recordingQuality, equals(0.5));
+      });
+
+      test('copyWith preserves recordingQuality when not specified', () {
+        const state = DecoderState(recordingQuality: 0.7);
+        final updated = state.copyWith(decodedText: 'SOS');
+        expect(updated.recordingQuality, equals(0.7));
+      });
+
+      test('quality >= 1.0 is HIGH — badge should be hidden', () {
+        const state = DecoderState(
+          status: DecoderStatus.result,
+          recordingQuality: 1.0,
+        );
+        // Badge is hidden when quality >= 1.0
+        expect(state.hasResult && state.recordingQuality >= 1.0, isTrue);
+      });
+
+      test('quality 0.7 is MED boundary — badge visible', () {
+        const state = DecoderState(
+          status: DecoderStatus.result,
+          recordingQuality: 0.7,
+        );
+        expect(state.hasResult && state.recordingQuality < 1.0, isTrue);
+        // 0.7 is NOT low (threshold is < 0.7)
+        expect(state.recordingQuality < 0.7, isFalse);
+      });
+
+      test('quality 0.8 is MED — badge visible, not low', () {
+        const state = DecoderState(
+          status: DecoderStatus.result,
+          recordingQuality: 0.8,
+        );
+        expect(state.hasResult && state.recordingQuality < 1.0, isTrue);
+        expect(state.recordingQuality < 0.7, isFalse);
+      });
+
+      test('quality 0.69 is LOW — just below threshold', () {
+        const state = DecoderState(
+          status: DecoderStatus.result,
+          recordingQuality: 0.69,
+        );
+        expect(state.hasResult && state.recordingQuality < 1.0, isTrue);
+        expect(state.recordingQuality < 0.7, isTrue);
+      });
+
+      test('quality 0.0 is LOW — worst quality', () {
+        const state = DecoderState(
+          status: DecoderStatus.result,
+          recordingQuality: 0.0,
+        );
+        expect(state.recordingQuality < 0.7, isTrue);
+      });
+
+      test('badge not shown when status is not result even if quality is low', () {
+        const state = DecoderState(
+          status: DecoderStatus.idle,
+          recordingQuality: 0.3,
+        );
+        // Badge only shows when hasResult AND quality < 1.0
+        expect(state.hasResult, isFalse);
+      });
+    });
+
     group('SignalSnapshot', () {
       test('SignalSnapshot has power field', () {
         final snapshot = SignalSnapshot(
