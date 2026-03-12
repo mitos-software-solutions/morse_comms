@@ -77,10 +77,14 @@ class OfflineAnalyzer {
   /// timing, which is unaffected by this inflation and handles ratios < 2.0.
   static const double _seedRatioThreshold = 2.0;
 
-  /// Silence longer than this separates distinct message segments (ms).
-  /// At 2 WPM the word gap is 7 × 800 = 5 600 ms, so 3 000 ms safely
-  /// separates inter-message gaps while keeping slow single-word messages
-  /// intact.
+  /// Minimum silence that separates distinct message segments (ms).
+  ///
+  /// This is the floor value used by [_adaptiveSegmentBreakMs]. At a known
+  /// WPM the actual threshold is `max(_segmentBreakMs, 10 × dotMs)`.  For
+  /// very slow operators (2 WPM, dotMs ≈ 600 ms) this yields 6 000 ms,
+  /// preventing a mid-message hesitation from being split as a new segment.
+  /// At 5 WPM and above, `10 × dotMs ≤ 2 400 ms`, so the 3 000 ms floor
+  /// applies unchanged.
   static const double _segmentBreakMs = 3000.0;
 
   /// Default Goertzel frame size (samples per analysis window).
@@ -254,12 +258,22 @@ class OfflineAnalyzer {
     final allEvents = _extractEvents(magnitudes, frameDurationMs, threshold);
     if (allEvents.isEmpty) return ('', 0.0);
 
-    // ── Step 3: segment splitting ────────────────────────────────────────────
-    final segments = _splitSegments(allEvents, _segmentBreakMs);
+    // ── Step 3: adaptive segment break threshold ─────────────────────────────
+    // Use the global bimodal estimate to set a WPM-aware break threshold.
+    // For very slow operators (2 WPM, dotMs ≈ 600 ms), the word gap is
+    // 7 × 600 = 4 200 ms, so the fixed 3 000 ms threshold would incorrectly
+    // split a single message.  The adaptive threshold `max(3000, 10 × dotMs)`
+    // keeps very slow messages intact without changing the threshold for normal
+    // speeds (5 WPM and above, where 10 × dotMs ≤ 2 400 ms ≤ 3 000 ms floor).
+    final minOnMs = frameDurationMs * 2.5; // moved up for use below
+    final breakMs = _adaptiveSegmentBreakMs(allEvents, minOnMs);
+
+    // ── Step 4: segment splitting ────────────────────────────────────────────
+    final segments = _splitSegments(allEvents, breakMs);
     // ignore: avoid_print
     print('[MorseDbg] OfflineAnalyzer: ${segments.length} segment(s)');
 
-    // ── Step 4: per-segment analysis ─────────────────────────────────────────
+    // ── Step 5: per-segment analysis ─────────────────────────────────────────
     // Noise filter: ignore ON events shorter than a WPM-aware threshold.
     // The debounce cannot produce events shorter than 2 × frameDuration,
     // so this threshold removes only the very shortest 2-frame events that
@@ -268,7 +282,7 @@ class OfflineAnalyzer {
     // (1.5-2.5×) to avoid filtering genuine short dots at high WPM while
     // still removing transients at lower speeds.
     // For segments without bimodal analysis, use conservative 2.5× threshold.
-    final minOnMs = frameDurationMs * 2.5;
+    // (minOnMs is defined above, before step 3)
 
     final parts = <String>[];
     double minConfidence = 1.0;
@@ -310,6 +324,43 @@ class OfflineAnalyzer {
       // High WPM (≥ 20 WPM): use aggressive 1.5× threshold
       return frameDurationMs * 1.5;
     }
+  }
+
+  /// Compute a WPM-aware segment break threshold.
+  ///
+  /// Runs a lightweight bimodal split on all ON events from [allEvents] to
+  /// estimate the global dot duration, then returns:
+  ///   `max(_segmentBreakMs, 10 × dotMs)`
+  ///
+  /// At 2 WPM (dotMs ≈ 600 ms) this gives 6 000 ms, preventing a
+  /// mid-message hesitation from being misclassified as an inter-message gap.
+  /// At 5 WPM and above (dotMs ≤ 240 ms), `10 × dotMs ≤ 2 400 ms` and the
+  /// 3 000 ms floor applies unchanged — no behaviour change for normal speeds.
+  ///
+  /// Falls back to [_segmentBreakMs] when the bimodal cannot produce a valid
+  /// estimate (too few events, invalid ratio).
+  static double _adaptiveSegmentBreakMs(
+    List<(bool, double)> allEvents,
+    double minOnMs,
+  ) {
+    final allOnDurs = allEvents
+        .where((e) => e.$1 && e.$2 >= minOnMs)
+        .map((e) => e.$2)
+        .toList();
+    if (allOnDurs.length >= _minOnEvents) {
+      final (globalDotMs, _, globalValid) = _robustBimodalSplit(allOnDurs);
+      if (globalValid && globalDotMs > 0) {
+        final adaptive = max(_segmentBreakMs, globalDotMs * 10.0);
+        if (adaptive > _segmentBreakMs) {
+          // ignore: avoid_print
+          print('[MorseDbg] Adaptive segment break:'
+              ' ${adaptive.toStringAsFixed(0)}ms'
+              ' (dotMs=${globalDotMs.toStringAsFixed(1)}ms × 10)');
+        }
+        return adaptive;
+      }
+    }
+    return _segmentBreakMs;
   }
 
   /// Analyse one segment and return `(decodedText, confidence)`.

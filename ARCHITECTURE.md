@@ -1,113 +1,57 @@
-# Morse Comms App — Architecture Decisions
+# Morse Comms App — Architecture
 
 ## Vision
 A prepper-focused Morse code app: fully offline, free, no ads, useful for survival and learning.
-Target: Android first, iOS later (same codebase).
+Target: Android-first, iOS same codebase.
 
 ## Platform
 **Flutter** (Dart)
 - Single codebase for Android and iOS
 - Native performance
 - Good audio/mic ecosystem
-- User background: Java, C, Python — Dart is Java-like, easy transition
 
 ## State Management
-**BLoC** (Business Logic Component)
+**BLoC** (`flutter_bloc ^9.0.0`)
 - Explicit event/state model — maps well to Java-style thinking
 - Best fit for complex concurrent audio state (recording + playing + decoding simultaneously)
-- Package: `flutter_bloc`
+- Settings state uses a simpler `Cubit` (no events needed)
 
 ## Dependency Injection
-- `get_it` + `injectable`
+`get_it ^8.0.0` + `injectable ^2.5.0` (code-gen via `build_runner`)
 
 ---
 
-## Implementation Status
+## Offline Analyzer Algorithm
 
-### Phase 1 — Core Engine ✅ DONE
-- `core/morse/morse_table.dart` — full ITU Morse table (A–Z, 0–9, punctuation)
-- `core/morse/morse_timing.dart` — timing math, WPM constants (PARIS standard)
-- `core/morse/morse_encoder.dart` — text → tone sequence
-- 22 unit tests passing
+`core/dsp/offline_analyzer.dart` — called after each recording stops or when a WAV file is loaded.
 
-### Phase 2 — Tone Generator ✅ DONE
-- `features/player/player_service.dart` — SoLoud-backed sine beep engine (play / stop / dispose)
-- Configurable frequency and WPM at construction time
+**Input:** Goertzel power magnitudes + frame duration (ms)
+**Output:** `(decodedText, confidence)`
 
-### Phase 3 — Goertzel DSP ✅ DONE
-- `core/dsp/goertzel.dart` — single-frequency energy detector
-- `core/dsp/morse_decoder.dart` — energy frames → dot/dash/gap symbols
-- `core/dsp/decoder_pipeline.dart` — streaming mic frames → symbol stream
-- `core/dsp/offline_analyzer.dart` — batch WAV analysis
-- 58 unit tests passing
+**Pipeline:**
+1. **Two-pass noise floor** — p33 of the full power distribution → rough threshold → mean of silent frames → final threshold = `6 × noiseFloor`
+2. **2-frame debounced event extraction** — mirrors `DecoderPipeline._runDecode`; produces `(isOn, durationMs)` pairs
+3. **Adaptive segment break** — global bimodal pre-estimate → `max(3000ms, 10 × dotMs)` break threshold
+4. **Segment splitting** — silence ≥ break threshold splits into segments; within each segment, `_detectSpeedChanges()` further splits on >30% dot-duration change (requires ≥ 4 events per sub-segment, CV < 0.40)
+5. **Per-segment analysis:**
+   - `< 4 ON events` → adaptive bootstrap (`_decodeAdaptive` with percentile pre-seed)
+   - `≥ 4 ON events`:
+     - Pass 1: pre-bimodal transient filter (`< 3 × frameDuration`)
+     - `_robustBimodalSplit()` — tries every split point; scores by proximity to ideal 3.0 ratio + relative gap; CV thresholds: 0.80 near-perfect (2.7–3.3), 0.65 good (2.2–2.7 or 3.3–4.0), 0.50 standard
+     - If standard bimodal fails and ≤ 7 events: retry with `minRatio=1.5` (soft bimodal)
+     - If bimodal invalid: return `?`
+     - If `ratio ≤ 2.0 AND dotMs < 90ms` (high WPM, low ratio): adaptive bootstrap
+     - Otherwise: Pass 2 isolation filter → `_findGapThreshold()` → `_decodeSeeded()`
 
-### Phase 4 — Encoder Screen ✅ DONE
-- `features/encoder/` — text field → Morse written notation + audio playback
-- EncoderBloc handles play / stop / text changed events
-
-### Phase 5 — Decoder Screen ✅ DONE
-- `features/decoder/` — mic → Goertzel → decoded text
-- DecoderBloc + DecoderService wired to mic stream
-- Signal meter via StreamBuilder (~10 updates/s, bypasses BLoC for low latency)
-- 100-frame noise-floor calibration before decoding starts; threshold = 6× noise floor
-- **Known issue**: decoder algorithm needs tuning (adaptive timing ratios, AGC interaction)
-
-### Phase 6 — Settings ✅ DONE
-- `features/settings/data/settings_repository.dart` — SharedPreferences persistence
-- `features/settings/bloc/settings_cubit.dart` + `settings_state.dart` — write-through cubit
-- `features/settings/ui/settings_screen.dart` — full UI with:
-  - Theme mode: System / Light / Dark (SegmentedButton, live app-level effect)
-  - WPM slider (5–40 WPM, persisted, ready to wire into encoder/decoder)
-  - Tone frequency slider (400–900 Hz, persisted, ready to wire into player)
-  - Side-tone toggle (persisted, decoder wiring pending)
-  - Premium unlock card (UI + stub dialog; purchase flow not yet implemented)
-  - Open-source licences page
-- SettingsCubit provided at app root; themeMode drives MaterialApp.router
-
-### Phase 7 — Learning Module ✅ DONE
-- `features/lessons/data/koch_curriculum.dart` — 36-char Koch order (A–Z + 0–9), `charsAt()` / `levelLabel()` helpers
-- `features/lessons/data/lesson_repository.dart` — SharedPreferences persistence for progress + per-level best accuracy
-- `features/lessons/bloc/lesson_state.dart` — `DrillRound`, `LessonState` (session accuracy, `canAdvance` computed property)
-- `features/lessons/bloc/lesson_cubit.dart` — generates random 5-char prompts, char-level scoring, advances level on ≥90% accuracy
-- `features/lessons/ui/lessons_screen.dart` — hub: current-level progress card, full Koch level list with lock state
-- `features/lessons/ui/drill_screen.dart` — 5 rounds × 5 chars; play → listen → type → char-diff → session summary → advance
-- `features/lessons/ui/reference_screen.dart` — full Morse table with visual dot/dash indicators, grouped by letters / digits / punctuation
-- Free tier: levels 1–5 (K M R S U); Premium tier: levels 6–36
-- `MorseTiming` WPM range extended 5–25 → **5–40** to match settings slider
-- Nav bar updated to 4 tabs: Encoder / Decoder / Learn / Settings
-
-### Phase 8 — Wire Settings into Features ✅ DONE
-- `EncoderBloc` accepts initial WPM + frequency; `EncoderSettingsChanged` event re-encodes live
-- `EncoderScreen` wraps with `BlocListener<SettingsCubit>` — settings take effect instantly
-- `DrillScreen` + `FarnsworthDrillScreen` receive `frequencyHz` from settings; passed to `player.play()`
-- `PlayerService` gains `startTone(frequencyHz)` / `stopTone()` for side-tone use
-- `DecoderService` accepts optional `onSideTone` callback; fires on per-frame tone-state transitions
-- `DecoderScreen` wires callback → `PlayerService.startTone/stopTone` when `sideTone` is enabled in settings
-- IAP skipped — no package selected yet; `SettingsCubit.unlockPremium()` stub remains
-
----
-
-## Pending Wiring
-| Item | Status |
-|------|--------|
-| WPM setting → EncoderBloc / DrillScreens | ✅ Wired |
-| Tone frequency setting → PlayerService | ✅ Wired |
-| Side-tone setting → DecoderService | ✅ Wired |
-| Decoder algorithm tuning | Known issue |
-
----
-
-## Decoder Sensitivity Tiers
-
-| Tier | Source | Approach | Complexity |
-|------|--------|----------|------------|
-| 1 | Phone speaker → mic | Goertzel, amplitude threshold | Low — ship first |
-| 2 | Radio / consistent tone | Goertzel + adaptive timing ratio | Medium |
-| 3 | Noisy audio / radio static | Bandpass FFT or lightweight ML | High — future |
-
-**Key insight**: dot duration ≈ 1/3 of dash duration. Decode the ratio adaptively from the first few symbols — don't hardcode timing.
-
-**Android AGC note**: Android's Automatic Gain Control on the mic fights amplitude-based detection. Use `MediaRecorder` or `AudioRecord` with AGC disabled via platform channel.
+**Key constants:**
+| Constant | Value | Purpose |
+|---|---|---|
+| `_minOnEvents` | 4 | Minimum ON events for bimodal |
+| `_minRatio` | 1.8 | Standard minimum dash:dot ratio |
+| `_maxRatio` | 4.5 | Maximum dash:dot ratio |
+| `_maxClusterCv` | 0.50 | Max CV per timing cluster (standard) |
+| `_seedRatioThreshold` | 2.0 | Below this (+ high WPM) → adaptive |
+| `_segmentBreakMs` | 3000ms | Floor for segment break threshold |
 
 ---
 
@@ -115,63 +59,108 @@ Target: Android first, iOS later (same codebase).
 
 ```
 lib/
-  features/
-    encoder/        # Text/Voice → Morse (written + audio)
-      bloc/
-      ui/
-      data/
-    decoder/        # Audio → Morse → Text
-      bloc/
-      ui/
-      data/
-    player/         # Beep generation, WPM control
-    lessons/        # Koch method, drills, exercises
-      bloc/         # LessonCubit + LessonState
-      data/         # KochCurriculum, LessonRepository
-      ui/           # LessonsScreen, DrillScreen, ReferenceScreen
-    settings/       # WPM, frequency, theme
-      bloc/         # SettingsCubit + SettingsState
-      data/         # SettingsRepository
-      ui/           # SettingsScreen
-  core/
-    morse/          # Pure algorithm: encoding table, timing constants
-    dsp/            # Goertzel algorithm, adaptive threshold
-    speech/         # STT abstraction (Android SpeechRecognizer, offline)
-    audio/          # Platform channel wrappers for low-level audio
   app/
-    app.dart        # Root widget, router
-    di.dart         # Dependency injection setup
+    app.dart            # Root widget, go_router setup, SettingsCubit → MaterialApp.router
+    di.dart             # get_it + injectable registration
+  core/
+    morse/              # Pure algorithm: table, timing, encoder, transliterator, Farnsworth
+    dsp/                # Goertzel, AdaptiveTiming, DecoderPipeline, OfflineAnalyzer
+    speech/             # STT abstraction (speech_to_text, Android offline)
+    audio/              # Low-level platform audio helpers
+  features/
+    encoder/
+      bloc/             # EncoderBloc + events + state
+      data/             # EncoderRepository, SpeechService (STT)
+      ui/               # EncoderScreen
+    decoder/
+      bloc/             # DecoderBloc + events + state (recordingQuality field)
+      data/             # DecoderService (mic pipeline, WAV export, offline analysis)
+      ui/               # DecoderScreen, RecordingQualityBadge (@visibleForTesting)
+    player/
+      player_service.dart  # SoLoud sine engine + WAV playback
+    lessons/
+      bloc/             # LessonCubit, FarnsworthCubit, LessonState
+      data/             # KochCurriculum, FarnsworthCurriculum, LessonRepository
+      ui/               # LessonsScreen hub, Koch/Farnsworth screens, DrillScreen, ReferenceScreen
+    settings/
+      bloc/             # SettingsCubit + SettingsState
+      data/             # SettingsRepository (SharedPreferences)
+      ui/               # SettingsScreen
+
+test/
+  app/                  # App navigation widget tests
+  core/
+    morse/              # Encoder, timing, transliterator unit tests
+    dsp/                # Goertzel, AdaptiveTiming, OfflineAnalyzer unit + simulation tests
+  features/             # BLoC/cubit/service unit tests + widget tests per feature
+  helpers/
+    sine_morse_generator.dart  # PCM generator for DSP simulation tests
 ```
 
 ---
 
-## Key Package Decisions
+## Package Decisions
 
-| Need | Package | Notes |
-|------|---------|-------|
-| State management | `flutter_bloc` | BLoC pattern |
-| DI | `get_it` + `injectable` | Code-gen DI |
-| Audio playback | `flutter_soloud` | Low-latency, good for beep gen |
-| Audio recording | `record` | Cross-platform mic access |
-| Speech-to-text | `speech_to_text` | Wraps Android SpeechRecognizer, offline on Android 10+ |
-| Navigation | `go_router` | Declarative, well-maintained |
-| Settings persistence | `shared_preferences` | Key-value store for theme, WPM, lesson progress |
-| DSP (Goertzel) | Custom Dart/platform channel | No suitable package exists |
+| Need | Package | Version | Notes |
+|------|---------|---------|-------|
+| State management | `flutter_bloc` | ^9.0.0 | BLoC + Cubit |
+| DI | `get_it` + `injectable` | ^8 / ^2.5 | Code-gen |
+| Audio playback | `flutter_soloud` | ^3.0.0 | Low-latency sine engine + WAV |
+| Audio recording | `record` | ^6.0.0 | `^5.x` incompatible (record_linux mismatch) |
+| Speech-to-text | `speech_to_text` | latest | Android on-device, offline (Android 10+) |
+| Navigation | `go_router` | ^14.0.0 | Declarative |
+| Settings persistence | `shared_preferences` | ^2.3.0 | Theme, WPM, frequency, lesson progress |
+| File sharing | `share_plus` | ^10.0.0 | `Share.shareXFiles([XFile(path)])` — store-safe save-to-device |
+| File picking | `file_selector` | ^1.0.0 | `openFile(acceptedTypeGroups: [...])` |
+| Path resolution | `path_provider` | ^2.1.0 | Temp dir for WAV export before share |
 
 ---
 
 ## Offline Requirement
 **100% offline — no exceptions.**
-- STT: Android on-device recognition only (available Android 10+)
+- STT: Android on-device recognition only (Android 10+)
 - No analytics, no cloud APIs, no network calls
-- All Morse logic is pure algorithm
+- All Morse logic and DSP are pure Dart algorithms
 
 ---
 
-## Morse Timing Standards (20 WPM baseline)
-- Dot = 1 unit (60ms at 20 WPM)
-- Dash = 3 units
-- Gap between symbols = 1 unit
-- Gap between letters = 3 units
-- Gap between words = 7 units
-- Standard tone frequency: 700 Hz
+## Morse Timing Standards
+
+| Element | Duration | At 20 WPM |
+|---|---|---|
+| Dot | 1 unit | 60 ms |
+| Dash | 3 units | 180 ms |
+| Symbol gap | 1 unit | 60 ms |
+| Letter gap | 3 units | 180 ms |
+| Word gap | 7 units | 420 ms |
+| Standard tone | — | 700 Hz |
+
+Farnsworth method: characters sent at normal (or higher) WPM; inter-letter and inter-word gaps expanded so the overall effective WPM is lower. Used in drill screens.
+
+---
+
+## Test Coverage
+
+825 tests, all passing (`flutter test`). Zero regressions across all phases.
+
+| Area | Files | What's covered |
+|---|---|---|
+| Core Morse | `test/core/morse/` | Table, timing, encoder, transliterator, Farnsworth timing |
+| DSP unit | `test/core/dsp/` | Goertzel, AdaptiveTiming, OfflineAnalyzer (all paths), edge cases, limits, CV diagnostics |
+| DSP simulation | `live_recording_simulation_test.dart` | Non-standard timing, click transients, room reverb, auto freq detection, no lead-in silence |
+| Real WAV | `custom_wav_test.dart`, `stereo_wav_test.dart` | yt1.wav, yt2.wav (YouTube), stereo downmix |
+| Feature BLoCs | `test/features/*/` | State transitions, repository persistence, event handling |
+| Widget tests | `*_screen_test.dart`, `recording_quality_badge_test.dart` | UI render, badge tiers, navigation |
+| App navigation | `app/app_navigation_test.dart` | Bottom nav, tab switching |
+
+---
+
+## Android-Specific Notes
+
+**AGC / Noise Suppression:** Android's Automatic Gain Control and Noise Suppressor treat periodic Morse tones as noise and corrupt timing. Fixed by recording with `AndroidAudioSource.unprocessed` (`RecordConfig.androidConfig`). Requires Android API 24+ (Android 7.0).
+
+**Goertzel power-lingering:** The Goertzel detector integrates energy over a 512-sample frame (~11.6 ms at 44.1 kHz). Tone energy bleeds into the first frame after the tone ends, inflating measured ON durations by ~1 frame. The offline analyzer accounts for this:
+- `_findGapThreshold` lower bound: `0.5 × dotMs` (not `1.0 ×`) to accept gap thresholds below the inflated dotMs
+- `_seedRatioThreshold` guard: ratios ≤ 2.0 with short dotMs use adaptive bootstrap, not the seeded path
+
+**ADB log encoding:** ADB logcat on Windows outputs UTF-16. To decode: `adb logcat | python3 -c "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read().decode('utf-16').encode('utf-8'))"`.

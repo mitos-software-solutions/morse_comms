@@ -1,0 +1,1 @@
+- add a confidence mark to each decoded message
