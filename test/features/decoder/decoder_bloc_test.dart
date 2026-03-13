@@ -1,8 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:morse_comms/core/dsp/decoder_pipeline.dart';
 import 'package:morse_comms/features/decoder/bloc/decoder_bloc.dart';
+
+import '../../helpers/fake_services.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -405,6 +408,254 @@ void main() {
         );
         // Badge only shows when hasResult AND quality < 1.0
         expect(state.hasResult, isFalse);
+      });
+    });
+
+    group('Event handlers', () {
+      late MockDecoderService svc;
+      late MockPlayerService player;
+      late DecoderBloc bloc;
+
+      setUpAll(() {
+        registerFallbackValue(Uint8List(0));
+      });
+
+      setUp(() {
+        svc = MockDecoderService();
+        player = MockPlayerService();
+        stubDecoderServiceOk(svc);
+        stubPlayerServiceOk(player);
+        bloc = DecoderBloc(service: svc, player: player);
+      });
+
+      tearDown(() async {
+        await bloc.close();
+      });
+
+      // ── Helper ──────────────────────────────────────────────────────────
+
+      Future<List<DecoderState>> collectStates(
+        Future<void> Function() act, {
+        Duration wait = const Duration(milliseconds: 100),
+      }) async {
+        final states = <DecoderState>[];
+        final sub = bloc.stream.listen(states.add);
+        await act();
+        await Future.delayed(wait);
+        await sub.cancel();
+        return states;
+      }
+
+      // ── DecoderListenRequested ──────────────────────────────────────────
+
+      test('listen — permission granted → listening state', () async {
+        final states = await collectStates(
+          () async => bloc.add(DecoderListenRequested()),
+        );
+        expect(states.any((s) => s.status == DecoderStatus.listening), isTrue);
+      });
+
+      test('listen — permission denied → permissionDenied=true', () async {
+        stubDecoderServiceOk(svc, permissionGranted: false);
+        final states = await collectStates(
+          () async => bloc.add(DecoderListenRequested()),
+        );
+        expect(states.last.permissionDenied, isTrue);
+        expect(states.last.status, DecoderStatus.idle);
+      });
+
+      test('listen — stops active playback before opening mic', () async {
+        // Seed the bloc with isPlayingAudio=true by going through AudioPlay.
+        final wavBytes = makeMinimalWav(Uint8List(88200)); // ~1 s of silence
+        when(() => svc.buildRecordingWav()).thenReturn(wavBytes);
+        bloc.emit(bloc.state.copyWith(
+          audioBytes: wavBytes,
+          isPlayingAudio: true,
+        ));
+        await collectStates(() async => bloc.add(DecoderListenRequested()));
+        verify(() => player.stopWav()).called(1);
+      });
+
+      test('listen — clears previous result text', () async {
+        bloc.emit(bloc.state.copyWith(
+          status: DecoderStatus.result,
+          decodedText: 'OLD',
+        ));
+        final states = await collectStates(
+          () async => bloc.add(DecoderListenRequested()),
+        );
+        final listeningState =
+            states.firstWhere((s) => s.status == DecoderStatus.listening);
+        expect(listeningState.decodedText, isEmpty);
+      });
+
+      // ── DecoderStopRequested ────────────────────────────────────────────
+
+      test('stop — transitions analyzing → result with decoded text', () async {
+        bloc.emit(bloc.state.copyWith(status: DecoderStatus.listening));
+        final states = await collectStates(
+          () async => bloc.add(DecoderStopRequested()),
+        );
+        expect(states.any((s) => s.status == DecoderStatus.analyzing), isTrue);
+        final result =
+            states.firstWhere((s) => s.status == DecoderStatus.result);
+        expect(result.decodedText, 'SOS');
+        expect(result.recordingQuality, 0.9);
+      });
+
+      test('stop — analyzeRecording throws → error state', () async {
+        when(() => svc.analyzeRecording())
+            .thenThrow(Exception('mic failed'));
+        bloc.emit(bloc.state.copyWith(status: DecoderStatus.listening));
+        final states = await collectStates(
+          () async => bloc.add(DecoderStopRequested()),
+        );
+        final err =
+            states.firstWhere((s) => s.errorMessage != null, orElse: () => bloc.state);
+        expect(err.errorMessage, isNotNull);
+      });
+
+      // ── DecoderSaveRequested ────────────────────────────────────────────
+
+      test('save — success → savedPath set in state', () async {
+        final states = await collectStates(
+          () async => bloc.add(DecoderSaveRequested()),
+        );
+        expect(states.last.savedPath, '/tmp/morse_test.wav');
+      });
+
+      test('save — service throws → errorMessage set', () async {
+        when(() => svc.saveRecording(any()))
+            .thenThrow(Exception('disk full'));
+        final states = await collectStates(
+          () async => bloc.add(DecoderSaveRequested()),
+        );
+        expect(states.last.errorMessage, isNotNull);
+      });
+
+      // ── DecoderShareRequested ───────────────────────────────────────────
+
+      test('share — savedPath null → shareRecording not called', () async {
+        await collectStates(() async => bloc.add(DecoderShareRequested()));
+        verifyNever(() => svc.shareRecording(any()));
+      });
+
+      test('share — savedPath set → shareRecording called', () async {
+        bloc.emit(bloc.state.copyWith(savedPath: '/tmp/morse_test.wav'));
+        await collectStates(() async => bloc.add(DecoderShareRequested()));
+        verify(() => svc.shareRecording('/tmp/morse_test.wav')).called(1);
+      });
+
+      // ── DecoderFileAnalysisRequested ────────────────────────────────────
+
+      test('analyzeFile — valid bytes → result with decoded text', () async {
+        final bytes = makeMinimalWav();
+        final states = await collectStates(
+          () async =>
+              bloc.add(DecoderFileAnalysisRequested(bytes, 'test.wav')),
+        );
+        expect(states.any((s) => s.status == DecoderStatus.analyzing), isTrue);
+        final result =
+            states.firstWhere((s) => s.status == DecoderStatus.result);
+        expect(result.decodedText, 'SOS');
+        expect(result.isFileAnalysis, isTrue);
+        expect(result.audioBytes, isNotNull);
+      });
+
+      test('analyzeFile — service throws → error state', () async {
+        when(() => svc.analyzeWavFile(any()))
+            .thenThrow(Exception('corrupt wav'));
+        final bytes = makeMinimalWav();
+        final states = await collectStates(
+          () async =>
+              bloc.add(DecoderFileAnalysisRequested(bytes, 'bad.wav')),
+        );
+        expect(states.last.errorMessage, isNotNull);
+      });
+
+      // ── DecoderCleared ──────────────────────────────────────────────────
+
+      test('clear — resets to initial state', () async {
+        bloc.emit(bloc.state.copyWith(
+          status: DecoderStatus.result,
+          decodedText: 'SOS',
+        ));
+        final states = await collectStates(
+          () async => bloc.add(DecoderCleared()),
+        );
+        expect(states.last.status, DecoderStatus.idle);
+        expect(states.last.decodedText, isEmpty);
+      });
+
+      test('clear — stops playback if audio was playing', () async {
+        bloc.emit(bloc.state.copyWith(isPlayingAudio: true));
+        await collectStates(() async => bloc.add(DecoderCleared()));
+        verify(() => player.stopWav()).called(1);
+      });
+
+      // ── DecoderAudioPlayRequested ───────────────────────────────────────
+
+      test('audioPlay — audioBytes null → no state change', () async {
+        final states = await collectStates(
+          () async => bloc.add(DecoderAudioPlayRequested()),
+        );
+        expect(states, isEmpty);
+      });
+
+      test('audioPlay — valid bytes → isPlayingAudio=true, playWav called',
+          () async {
+        final bytes = makeMinimalWav();
+        bloc.emit(bloc.state.copyWith(audioBytes: bytes));
+        final states = await collectStates(
+          () async => bloc.add(DecoderAudioPlayRequested()),
+        );
+        expect(states.first.isPlayingAudio, isTrue);
+        verify(() => player.playWav(bytes)).called(1);
+      });
+
+      // ── DecoderAudioStopRequested ───────────────────────────────────────
+
+      test('audioStop → isPlayingAudio=false, stopWav called', () async {
+        bloc.emit(bloc.state.copyWith(isPlayingAudio: true));
+        final states = await collectStates(
+          () async => bloc.add(DecoderAudioStopRequested()),
+        );
+        expect(states.last.isPlayingAudio, isFalse);
+        verify(() => player.stopWav()).called(1);
+      });
+
+      // ── DecoderAudioPlaybackCompleted ───────────────────────────────────
+
+      test('audioPlaybackCompleted → isPlayingAudio=false', () async {
+        bloc.emit(bloc.state.copyWith(isPlayingAudio: true));
+        final states = await collectStates(
+          () async => bloc.add(DecoderAudioPlaybackCompleted()),
+        );
+        expect(states.last.isPlayingAudio, isFalse);
+      });
+
+      // ── _estimateDurationMs ─────────────────────────────────────────────
+
+      test('estimateDurationMs — valid WAV header returns > 0', () async {
+        // 88200 bytes of PCM data at 88200 byte/s = 1000 ms
+        final bytes = makeMinimalWav(Uint8List(88200));
+        bloc.emit(bloc.state.copyWith(audioBytes: bytes));
+        final states = await collectStates(
+          () async => bloc.add(DecoderAudioPlayRequested()),
+          wait: const Duration(milliseconds: 1200),
+        );
+        // Playback completes naturally (timer fired): isPlayingAudio → false
+        expect(states.last.isPlayingAudio, isFalse);
+      });
+
+      test('estimateDurationMs — short WAV (< 44 bytes) returns 0', () async {
+        final shortBytes = Uint8List(10);
+        bloc.emit(bloc.state.copyWith(audioBytes: shortBytes));
+        final states = await collectStates(
+          () async => bloc.add(DecoderAudioPlayRequested()),
+        );
+        // isPlayingAudio goes true but no completion timer fires (duration=0)
+        expect(states.last.isPlayingAudio, isTrue);
       });
     });
 

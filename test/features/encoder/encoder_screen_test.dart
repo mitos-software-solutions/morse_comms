@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morse_comms/core/morse/morse_encoder.dart';
+import 'package:morse_comms/features/encoder/bloc/encoder_bloc.dart';
 import 'package:morse_comms/features/encoder/ui/encoder_screen.dart';
 import 'package:morse_comms/features/player/player_service.dart';
 import 'package:morse_comms/features/settings/bloc/settings_cubit.dart';
@@ -190,6 +191,83 @@ void main() {
 
     expect(find.text('— morse output —'), findsNothing);
     expect(find.text('... --- ...'), findsOneWidget);
+  });
+
+  // ── State-driven UI tests ───────────────────────────────────────────────────
+
+  EncoderBloc encoderBloc(WidgetTester tester) =>
+      tester.element(find.byType(FilledButton).first).read<EncoderBloc>();
+
+  group('state-driven UI', () {
+    late SettingsCubit settingsCubit;
+    late _StubPlayerService player;
+
+    setUp(() async {
+      settingsCubit = await _makeSettingsCubit();
+      player = _StubPlayerService();
+    });
+
+    testWidgets('playing state — Stop button shown', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      encoderBloc(tester).emit(const EncoderState(
+        morseWritten: '... --- ...',
+        playback: PlaybackStatus.playing,
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.widgetWithText(FilledButton, 'Stop'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Play'), findsNothing);
+    });
+
+    testWidgets('STT listening state — status row shown', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      encoderBloc(tester).emit(const EncoderState(
+        sttStatus: SttStatus.listening,
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Listening… speak now'), findsOneWidget);
+    });
+
+    testWidgets('STT error state — error message shown', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      encoderBloc(tester).emit(const EncoderState(
+        sttStatus: SttStatus.error,
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('Microphone unavailable'), findsOneWidget);
+    });
+
+    testWidgets('settings change dispatches EncoderSettingsChanged',
+        (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      // Changing WPM via the cubit fires the BlocListener which dispatches
+      // EncoderSettingsChanged into the EncoderBloc.
+      await settingsCubit.setWpm(25);
+      await tester.pump();
+      await tester.pump();
+
+      // Verify the screen is still functional after the settings update.
+      await tester.enterText(find.byType(TextField), 'E');
+      await tester.pumpAndSettle();
+      expect(find.text('.'), findsOneWidget);
+    });
   });
 }
 

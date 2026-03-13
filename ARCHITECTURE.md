@@ -44,14 +44,14 @@ Target: Android-first, iOS same codebase.
      - Otherwise: Pass 2 isolation filter → `_findGapThreshold()` → `_decodeSeeded()`
 
 **Key constants:**
-| Constant | Value | Purpose |
-|---|---|---|
-| `_minOnEvents` | 4 | Minimum ON events for bimodal |
-| `_minRatio` | 1.8 | Standard minimum dash:dot ratio |
-| `_maxRatio` | 4.5 | Maximum dash:dot ratio |
-| `_maxClusterCv` | 0.50 | Max CV per timing cluster (standard) |
-| `_seedRatioThreshold` | 2.0 | Below this (+ high WPM) → adaptive |
-| `_segmentBreakMs` | 3000ms | Floor for segment break threshold |
+| Constant              | Value  | Purpose
+|-----------------------|--------|------------------------------
+| `_minOnEvents`        | 4      | Minimum ON events for bimodal
+| `_minRatio`           | 1.8    | Standard minimum dash:dot ratio
+| `_maxRatio`           | 4.5    | Maximum dash:dot ratio
+| `_maxClusterCv`       | 0.50   | Max CV per timing cluster (standard)
+| `_seedRatioThreshold` | 2.0    | Below this (+ high WPM) → adaptive
+| `_segmentBreakMs`     | 3000ms | Floor for segment break threshold
 
 ---
 
@@ -95,24 +95,25 @@ test/
   features/             # BLoC/cubit/service unit tests + widget tests per feature
   helpers/
     sine_morse_generator.dart  # PCM generator for DSP simulation tests
+    fake_services.dart          # MockDecoderService, MockPlayerService, makeMinimalWav()
 ```
 
 ---
 
 ## Package Decisions
 
-| Need | Package | Version | Notes |
-|------|---------|---------|-------|
-| State management | `flutter_bloc` | ^9.0.0 | BLoC + Cubit |
-| DI | `get_it` + `injectable` | ^8 / ^2.5 | Code-gen |
-| Audio playback | `flutter_soloud` | ^3.0.0 | Low-latency sine engine + WAV |
-| Audio recording | `record` | ^6.0.0 | `^5.x` incompatible (record_linux mismatch) |
-| Speech-to-text | `speech_to_text` | latest | Android on-device, offline (Android 10+) |
-| Navigation | `go_router` | ^14.0.0 | Declarative |
-| Settings persistence | `shared_preferences` | ^2.3.0 | Theme, WPM, frequency, lesson progress |
-| File sharing | `share_plus` | ^10.0.0 | `Share.shareXFiles([XFile(path)])` — store-safe save-to-device |
-| File picking | `file_selector` | ^1.0.0 | `openFile(acceptedTypeGroups: [...])` |
-| Path resolution | `path_provider` | ^2.1.0 | Temp dir for WAV export before share |
+| Need                 | Package                  | Version   | Notes 
+|----------------------|--------------------------|-----------|----------------
+| State management     | `flutter_bloc`           | ^9.0.0    | BLoC + Cubit 
+| DI                   | `get_it` + `injectable`  | ^8 / ^2.5 | Code-gen 
+| Audio playback       | `flutter_soloud`         | ^3.0.0    | Low-latency sine engine + WAV 
+| Audio recording      | `record`                 | ^6.0.0    | `^5.x` incompatible (record_linux mismatch) 
+| Speech-to-text       | `speech_to_text`         | latest    | Android on-device, offline (Android 10+) 
+| Navigation           | `go_router`              | ^14.0.0   | Declarative 
+| Settings persistence | `shared_preferences`     | ^2.3.0    | Theme, WPM, frequency, lesson progress 
+| File sharing         | `share_plus`             | ^10.0.0   | `Share.shareXFiles([XFile(path)])` — store-safe save-to-device 
+| File picking         | `file_selector`          | ^1.0.0    | `openFile(acceptedTypeGroups: [...])` 
+| Path resolution      | `path_provider`          | ^2.1.0    | Temp dir for WAV export before share 
 
 ---
 
@@ -126,14 +127,14 @@ test/
 
 ## Morse Timing Standards
 
-| Element | Duration | At 20 WPM |
-|---|---|---|
-| Dot | 1 unit | 60 ms |
-| Dash | 3 units | 180 ms |
-| Symbol gap | 1 unit | 60 ms |
-| Letter gap | 3 units | 180 ms |
-| Word gap | 7 units | 420 ms |
-| Standard tone | — | 700 Hz |
+| Element       | Duration | At 20 WPM 
+|---------------|----------|----------
+| Dot           | 1 unit   | 60 ms 
+| Dash          | 3 units  | 180 ms 
+| Symbol gap    | 1 unit   | 60 ms 
+| Letter gap    | 3 units  | 180 ms
+| Word gap      | 7 units  | 420 ms
+| Standard tone |    —     | 700 Hz
 
 Farnsworth method: characters sent at normal (or higher) WPM; inter-letter and inter-word gaps expanded so the overall effective WPM is lower. Used in drill screens.
 
@@ -141,17 +142,18 @@ Farnsworth method: characters sent at normal (or higher) WPM; inter-letter and i
 
 ## Test Coverage
 
-825 tests, all passing (`flutter test`). Zero regressions across all phases.
+881 tests, all passing (`flutter test`). **85.1% line coverage** (2504/2941). Zero regressions across all phases.
 
-| Area | Files | What's covered |
-|---|---|---|
-| Core Morse | `test/core/morse/` | Table, timing, encoder, transliterator, Farnsworth timing |
-| DSP unit | `test/core/dsp/` | Goertzel, AdaptiveTiming, OfflineAnalyzer (all paths), edge cases, limits, CV diagnostics |
-| DSP simulation | `live_recording_simulation_test.dart` | Non-standard timing, click transients, room reverb, auto freq detection, no lead-in silence |
-| Real WAV | `custom_wav_test.dart`, `stereo_wav_test.dart` | yt1.wav, yt2.wav (YouTube), stereo downmix |
-| Feature BLoCs | `test/features/*/` | State transitions, repository persistence, event handling |
-| Widget tests | `*_screen_test.dart`, `recording_quality_badge_test.dart` | UI render, badge tiers, navigation |
-| App navigation | `app/app_navigation_test.dart` | Bottom nav, tab switching |
+| Area            | Files                                                     | What's covered
+|-----------------|-----------------------------------------------------------|----------------------------------------------------------
+| Core Morse      | `test/core/morse/`                                        | Table, timing, encoder, transliterator, Farnsworth timing
+| DSP unit        | `test/core/dsp/`                                          | Goertzel, AdaptiveTiming, OfflineAnalyzer (all paths), edge cases, limits, CV diagnostics
+| DSP simulation  | `live_recording_simulation_test.dart`                     | Non-standard timing, click transients, room reverb, auto freq detection, no lead-in silence
+| Real WAV        | `custom_wav_test.dart`, `stereo_wav_test.dart`            | yt1.wav, yt2.wav (YouTube), stereo downmix
+| Feature BLoCs   | `test/features/*/`                                        | State transitions, repository persistence, full event handler coverage (DecoderBloc, EncoderBloc)
+| Widget tests    | `*_screen_test.dart`, `recording_quality_badge_test.dart` | UI render, state-driven transitions, badge tiers, navigation
+| App navigation  | `app/app_navigation_test.dart`                            | Bottom nav, tab switching
+| Test helpers    | `test/helpers/`                                           | `MockDecoderService`, `MockPlayerService`, `makeMinimalWav()`, `stubDecoderServiceOk()` 
 
 ---
 

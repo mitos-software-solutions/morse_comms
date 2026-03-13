@@ -39,23 +39,33 @@ flutter test
 - **Feature logic tests (BLoC/cubits/services)**
   - Location: `test/features/**`
   - Examples:
+    - `decoder_bloc_test.dart` — full event handler coverage: all 10 public events + `_estimateDurationMs` helper; uses `MockDecoderService` / `MockPlayerService` from `test/helpers/fake_services.dart`.
     - `encoder_bloc_test.dart`
     - `settings_cubit_test.dart` and `settings_repository_test.dart`
     - Lessons tests (`lesson_cubit_test.dart`, `farnsworth_cubit_test.dart`, etc.)
   - Style:
-    - Use `flutter_test`’s `test(...)` API.
+    - Use `flutter_test`’s `test(...)` / `blocTest(...)` API.
     - Stub or mock out platform-dependent pieces (audio, speech, shared preferences).
+    - `mocktail` used for concrete-class mocking (`MockDecoderService extends Mock implements DecoderService`); register `Uint8List(0)` fallback value for `any()` matchers.
   - Purpose:
     - Verify state transitions for BLoCs/cubits.
     - Ensure repositories persist and reload data correctly.
     - Guarantee settings/lessons/player behavior remains consistent as features evolve.
 
+- **Shared test helpers**
+  - File: `test/helpers/fake_services.dart`
+  - Provides:
+    - `MockDecoderService` / `MockPlayerService` — `mocktail` mocks for both services.
+    - `stubDecoderServiceOk(svc, {...})` — happy-path stubs for all `DecoderService` methods in one call.
+    - `stubPlayerServiceOk(player)` — stubs `playWav`, `stopWav`, `dispose`.
+    - `makeMinimalWav([Uint8List? pcmBytes])` — builds a valid 44-byte WAV header + payload (byteRate = 88200) for use in tests that need audio bytes without a real file.
+
 This layer is the **backbone** of the test suite.
 
 Known intentional gaps at this level:
 
-- `features/encoder/data/speech_service.dart` — **0% coverage** by unit tests because it is hardware / platform-channel dependent (mic + STT). It will be exercised via higher-level integration/device tests instead.
-- `features/player/player_service.dart` — **0% coverage** by unit tests for real audio output; only stubbed in widget tests. Real audio behavior will be verified via integration/device tests.
+- `features/encoder/data/speech_service.dart` — **~0% coverage** by unit tests because it is hardware / platform-channel dependent (mic + STT). It will be exercised via higher-level integration/device tests instead.
+- `features/player/player_service.dart` — **~0% coverage** by unit tests for real audio output; only stubbed in widget tests. Real audio behavior will be verified via integration/device tests.
 
 ---
 
@@ -94,15 +104,26 @@ They live under `test/features/**` and run with the regular `flutter test` comma
     - **Morse output card**:
       - Shows placeholder `— morse output —` initially.
       - After typing `SOS`, placeholder disappears and `... --- ...` is rendered.
+    - **State-driven UI** (via `encoderBloc(tester).emit(...)`):
+      - Playing state → button shows `Stop` (red) instead of `Play`.
+      - `SttStatus.listening` → `"Listening… speak now"` row visible.
+      - `SttStatus.error` → `"Microphone unavailable"` error text shown.
+      - Settings WPM change via `settingsCubit.setWpm(x)` → `BlocListener` dispatches `EncoderSettingsChanged`; screen remains functional.
 
 - **DecoderScreen widget tests**
   - File: `test/features/decoder/decoder_screen_test.dart`
   - Builds `DecoderScreen` with a real `SettingsCubit` (mock `SharedPreferences`) and a stub `PlayerService`.
+  - Accesses the internally-created `DecoderBloc` via `tester.element(find.byType(FilledButton).first).read<DecoderBloc>()` — no production-code changes needed.
+  - **Note:** `BlocBuilder` uses an async broadcast stream. After `bloc.emit(state)`, two consecutive `await tester.pump()` calls are required: the first delivers the stream event and schedules `setState`, the second renders the rebuilt frame.
   - Verifies:
-    - App bar title `Morse Decoder` is shown.
-    - Initial placeholder text `Press Listen to start recording` is rendered with the main `Listen` button.
-    - The “New Recording” app bar action is present.
-    - The `Save to Device` button is not shown when there is no decoded result.
+    - **Basic UI / idle state**: title, placeholder, Listen button, audio toolbar (New Recording / Load Example / Open Recording), Play and Save hidden when no audio.
+    - **Listening state**: Stop button replaces Listen; recording header shows formatted timer (e.g. `1:05`); signal meter shows `TONE` or `silence` based on snapshot.
+    - **Analyzing state**: spinner + `”Analyzing…”` label shown; button disabled.
+    - **Result state**: decoded text or `”No Morse detected”` placeholder; Play+Save appear when `audioBytes != null`; Play icon toggles to Stop when `isPlayingAudio=true`.
+    - **Quality badges**: MED (`0.8`) shows fair-quality message; LOW (`0.5`) shows poor-quality message; HIGH (`1.0`) shows no badge.
+    - **Banners**: permission-denied and error banners rendered from state.
+    - **Saved chip**: filename + Share button shown when `savedPath` is set.
+    - **Reset button**: disabled at idle, enabled at result, tapping dispatches `DecoderCleared` → state returns to idle.
 
 - **RecordingQualityBadge widget tests**
   - File: `test/features/decoder/recording_quality_badge_test.dart`
