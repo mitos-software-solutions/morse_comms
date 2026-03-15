@@ -193,6 +193,59 @@ void main() {
     expect(find.text('... --- ...'), findsOneWidget);
   });
 
+  // ── Layout / overflow tests ─────────────────────────────────────────────────
+
+  group('layout — no overflow on small phone with keyboard open', () {
+    // Simulates a mid-range Android phone: 360×780 dp @ 3×.
+    // The keyboard inset (~280 dp = 840 physical px) reduces the body height
+    // to ~500 dp — the same constraint that triggered the overflow bug.
+
+    const physicalWidth = 1080.0; // 360 dp
+    const physicalHeight = 2340.0; // 780 dp
+    const dpr = 3.0;
+    const keyboardPhysicalHeight = 840.0; // ~280 dp keyboard
+
+    Future<void> pumpWithKeyboard(
+      WidgetTester tester, {
+      required String inputText,
+    }) async {
+      final settingsCubit = await _makeSettingsCubit();
+      final player = _StubPlayerService();
+
+      // Set phone screen dimensions and restore them after the test.
+      tester.view.physicalSize = const Size(physicalWidth, physicalHeight);
+      tester.view.devicePixelRatio = dpr;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      // Enter text first (so Morse output expands), then raise the keyboard.
+      await tester.enterText(find.byType(TextField), inputText);
+
+      // Simulate keyboard appearing — shrinks body height.
+      tester.view.viewInsets =
+          FakeViewPadding(bottom: keyboardPhysicalHeight);
+
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('short text does not overflow', (tester) async {
+      await pumpWithKeyboard(tester, inputText: 'SOS');
+      // No exception → no overflow.
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('long text with multi-line Morse does not overflow',
+        (tester) async {
+      // ~30 chars → Morse output spans several lines.
+      await pumpWithKeyboard(
+          tester, inputText: 'HELLO WORLD THIS IS A LONG MESSAGE');
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   // ── State-driven UI tests ───────────────────────────────────────────────────
 
   EncoderBloc encoderBloc(WidgetTester tester) =>

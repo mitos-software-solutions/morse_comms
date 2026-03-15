@@ -109,6 +109,11 @@ They live under `test/features/**` and run with the regular `flutter test` comma
       - `SttStatus.listening` → `"Listening… speak now"` row visible.
       - `SttStatus.error` → `"Microphone unavailable"` error text shown.
       - Settings WPM change via `settingsCubit.setWpm(x)` → `BlocListener` dispatches `EncoderSettingsChanged`; screen remains functional.
+    - **Layout / overflow** (simulated phone + keyboard):
+      - Uses `tester.view.physicalSize`, `tester.view.devicePixelRatio`, and `tester.view.viewInsets` (`FakeViewPadding`) to replicate a mid-range Android phone (360×780 dp) with the soft keyboard raised (~280 dp inset).
+      - `addTearDown(tester.view.reset)` restores defaults after each test so other tests are unaffected.
+      - Verifies no `FlutterError` overflow with short text (`SOS`) and with long text (~30 chars) that produces multi-line Morse output.
+      - **Why these tests exist**: the default test surface (800×600) never triggers overflow; `tester.enterText()` does not shrink the viewport. The overflow bug (fixed by replacing `Padding` with `SingleChildScrollView`) was only visible when both conditions held simultaneously on real hardware.
 
 - **DecoderScreen widget tests**
   - File: `test/features/decoder/decoder_screen_test.dart`

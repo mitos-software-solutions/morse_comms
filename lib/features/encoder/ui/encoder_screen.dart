@@ -70,7 +70,7 @@ class _EncoderViewState extends State<_EncoderView> {
           title: const Text('Morse Encoder'),
           centerTitle: true,
         ),
-        body: Padding(
+        body: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

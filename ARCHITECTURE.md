@@ -140,23 +140,6 @@ Farnsworth method: characters sent at normal (or higher) WPM; inter-letter and i
 
 ---
 
-## Test Coverage
-
-881 tests, all passing (`flutter test`). **85.1% line coverage** (2504/2941). Zero regressions across all phases.
-
-| Area            | Files                                                     | What's covered
-|-----------------|-----------------------------------------------------------|----------------------------------------------------------
-| Core Morse      | `test/core/morse/`                                        | Table, timing, encoder, transliterator, Farnsworth timing
-| DSP unit        | `test/core/dsp/`                                          | Goertzel, AdaptiveTiming, OfflineAnalyzer (all paths), edge cases, limits, CV diagnostics
-| DSP simulation  | `live_recording_simulation_test.dart`                     | Non-standard timing, click transients, room reverb, auto freq detection, no lead-in silence
-| Real WAV        | `custom_wav_test.dart`, `stereo_wav_test.dart`            | yt1.wav, yt2.wav (YouTube), stereo downmix
-| Feature BLoCs   | `test/features/*/`                                        | State transitions, repository persistence, full event handler coverage (DecoderBloc, EncoderBloc)
-| Widget tests    | `*_screen_test.dart`, `recording_quality_badge_test.dart` | UI render, state-driven transitions, badge tiers, navigation
-| App navigation  | `app/app_navigation_test.dart`                            | Bottom nav, tab switching
-| Test helpers    | `test/helpers/`                                           | `MockDecoderService`, `MockPlayerService`, `makeMinimalWav()`, `stubDecoderServiceOk()` 
-
----
-
 ## Android-Specific Notes
 
 **AGC / Noise Suppression:** Android's Automatic Gain Control and Noise Suppressor treat periodic Morse tones as noise and corrupt timing. Fixed by recording with `AndroidAudioSource.unprocessed` (`RecordConfig.androidConfig`). Requires Android API 24+ (Android 7.0).
