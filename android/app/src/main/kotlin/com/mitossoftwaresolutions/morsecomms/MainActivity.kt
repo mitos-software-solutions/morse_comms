@@ -1,4 +1,4 @@
-package com.example.morse_comms
+package com.mitossoftwaresolutions.morsecomms
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -12,7 +12,14 @@ Prepper-focused Morse code app — fully offline, free, useful for survival and 
 - See [TESTING.md](TESTING.md) for the testing strategy and test layers.
 
 
-## Build APK
+## Build
+
+**Release AAB (for Play Store upload):**
+```bash
+flutter build appbundle --release
+# Output: build/app/outputs/bundle/release/app-release.aab
+```
+Requires `android/key.properties` with signing credentials (gitignored — see a maintainer).
 
 **Debug APK (fast, no signing needed):**
 ```bash
@@ -20,7 +27,7 @@ flutter build apk --debug
 # Output: build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-**Release APK (optimised, requires signing config or use --no-shrink for testing):**
+**Release APK (optimised, requires signing config):**
 ```bash
 flutter build apk --release
 # Output: build/app/outputs/flutter-apk/app-release.apk
@@ -29,7 +36,7 @@ flutter build apk --release
 **Install to connected device/emulator after build:**
 ```bash
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
-adb shell am start -n com.example.morse_comms/.MainActivity
+adb shell am start -n com.mitossoftwaresolutions.morsecomms/.MainActivity
 ```
 
 ## Testing the app
@@ -57,13 +64,13 @@ flutter run -d emulator-5554
 
 **Quick relaunch (APK already installed):**
 ```bash
-adb shell am start -n com.example.morse_comms/.MainActivity
+adb shell am start -n com.mitossoftwaresolutions.morsecomms/.MainActivity
 ```
 
 **Install + launch from built APK:**
 ```bash
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
-adb shell am start -n com.example.morse_comms/.MainActivity
+adb shell am start -n com.mitossoftwaresolutions.morsecomms/.MainActivity
 ```
 
 ## Contributing
