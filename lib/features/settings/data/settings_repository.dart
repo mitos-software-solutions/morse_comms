@@ -6,7 +6,6 @@ class SettingsRepository {
   static const _keyWpm = 'wpm';
   static const _keyToneFrequency = 'tone_frequency';
   static const _keySideTone = 'side_tone';
-  static const _keyIsPremium = 'is_premium';
   static const _keySttLocaleId = 'stt_locale_id';
 
   final SharedPreferences _prefs;
@@ -38,11 +37,6 @@ class SettingsRepository {
 
   Future<void> setSideTone(bool enabled) =>
       _prefs.setBool(_keySideTone, enabled);
-
-  // --- Premium ---
-  bool get isPremium => _prefs.getBool(_keyIsPremium) ?? false;
-
-  Future<void> setPremium(bool value) => _prefs.setBool(_keyIsPremium, value);
 
   // --- STT locale (BCP-47 locale id, e.g. 'en_US') ---
   String get sttLocaleId => _prefs.getString(_keySttLocaleId) ?? 'en_US';

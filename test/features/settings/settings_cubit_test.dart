@@ -18,7 +18,6 @@ void main() {
       expect(cubit.state.wpm, 20);
       expect(cubit.state.toneFrequency, 600.0);
       expect(cubit.state.sideTone, isFalse);
-      expect(cubit.state.isPremium, isFalse);
     });
 
     test('loads persisted values from SharedPreferences', () async {
@@ -27,13 +26,11 @@ void main() {
         'wpm': 15,
         'tone_frequency': 440.0,
         'side_tone': true,
-        'is_premium': true,
       });
       expect(cubit.state.themeMode, ThemeMode.dark);
       expect(cubit.state.wpm, 15);
       expect(cubit.state.toneFrequency, 440.0);
       expect(cubit.state.sideTone, isTrue);
-      expect(cubit.state.isPremium, isTrue);
     });
   });
 
@@ -114,28 +111,6 @@ void main() {
       await cubit.setSideTone(true);
       final sp = await SharedPreferences.getInstance();
       expect(SettingsRepository(sp).sideTone, isTrue);
-    });
-  });
-
-  group('SettingsCubit — unlockPremium()', () {
-    test('emits isPremium = true', () async {
-      final cubit = await makeCubit();
-      expect(cubit.state.isPremium, isFalse);
-      await cubit.unlockPremium();
-      expect(cubit.state.isPremium, isTrue);
-    });
-
-    test('persists isPremium', () async {
-      final cubit = await makeCubit();
-      await cubit.unlockPremium();
-      final sp = await SharedPreferences.getInstance();
-      expect(SettingsRepository(sp).isPremium, isTrue);
-    });
-
-    test('does not change other fields', () async {
-      final cubit = await makeCubit({'wpm': 35});
-      await cubit.unlockPremium();
-      expect(cubit.state.wpm, 35);
     });
   });
 

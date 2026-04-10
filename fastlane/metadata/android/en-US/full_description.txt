@@ -1,0 +1,18 @@
+Morse Comms is a prepper-focused Morse code toolkit that works entirely offline — no internet connection required, ever.
+
+Whether you're a ham radio operator, a survival enthusiast, or just learning Morse code for fun, Morse Comms covers everything from practice to real-world use.
+
+FEATURES
+
+• Encoder — type text and hear it as Morse code. Adjust speed (5–40 WPM) and tone frequency (400–900 Hz). Supports voice-to-text input.
+• Decoder — listen to Morse code through your microphone and see it decoded in real time. Uses Goertzel DSP for accurate frequency detection.
+• WAV analysis — record a session or open an existing WAV file and decode it offline.
+• Lessons — structured learning with the Koch method and Farnsworth timing so you build speed the right way.
+• Reference — full character set, prosigns, and Q-codes at a glance.
+• Settings — theme (System / Light / Dark), WPM, tone frequency, side-tone toggle — all persisted.
+
+PRIVACY
+
+No analytics. No crash reporting. No network requests. No permissions beyond microphone access (for the decoder) and storage (for saving recordings).
+
+100% free and open source (MIT). Source code: https://github.com/mitos-software-solutions/morse_comms

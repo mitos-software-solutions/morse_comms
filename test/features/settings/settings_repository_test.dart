@@ -90,21 +90,4 @@ void main() {
     });
   });
 
-  group('SettingsRepository — premium', () {
-    test('defaults to false', () async {
-      final repo = await makeRepo();
-      expect(repo.isPremium, isFalse);
-    });
-
-    test('setPremium true persists', () async {
-      final repo = await makeRepo();
-      await repo.setPremium(true);
-      expect(repo.isPremium, isTrue);
-    });
-
-    test('loads persisted premium flag', () async {
-      final repo = await makeRepo({'is_premium': true});
-      expect(repo.isPremium, isTrue);
-    });
-  });
 }

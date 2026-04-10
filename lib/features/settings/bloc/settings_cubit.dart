@@ -18,7 +18,6 @@ class SettingsCubit extends Cubit<SettingsState> {
           wpm: _repo.wpm,
           toneFrequency: _repo.toneFrequency,
           sideTone: _repo.sideTone,
-          isPremium: _repo.isPremium,
           sttLocaleId: _repo.sttLocaleId,
         ));
 
@@ -64,9 +63,4 @@ class SettingsCubit extends Cubit<SettingsState> {
     ));
   }
 
-  /// Called after a successful in-app purchase.
-  Future<void> unlockPremium() async {
-    await _repo.setPremium(true);
-    emit(state.copyWith(isPremium: true));
-  }
 }

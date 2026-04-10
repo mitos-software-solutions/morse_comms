@@ -12,7 +12,6 @@ class SettingsState {
   final int wpm;
   final double toneFrequency;
   final bool sideTone;
-  final bool isPremium;
   final String sttLocaleId;
   final List<SttLocale> sttLocales;
 
@@ -21,7 +20,6 @@ class SettingsState {
     this.wpm = 20,
     this.toneFrequency = 600.0,
     this.sideTone = false,
-    this.isPremium = false,
     this.sttLocaleId = 'en_US',
     this.sttLocales = const [],
   });
@@ -31,7 +29,6 @@ class SettingsState {
     int? wpm,
     double? toneFrequency,
     bool? sideTone,
-    bool? isPremium,
     String? sttLocaleId,
     List<SttLocale>? sttLocales,
   }) {
@@ -40,7 +37,6 @@ class SettingsState {
       wpm: wpm ?? this.wpm,
       toneFrequency: toneFrequency ?? this.toneFrequency,
       sideTone: sideTone ?? this.sideTone,
-      isPremium: isPremium ?? this.isPremium,
       sttLocaleId: sttLocaleId ?? this.sttLocaleId,
       sttLocales: sttLocales ?? this.sttLocales,
     );

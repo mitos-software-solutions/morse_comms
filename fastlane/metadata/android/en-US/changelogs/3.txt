@@ -1,0 +1,9 @@
+Initial public release.
+
+• Encoder with adjustable WPM and tone frequency
+• Real-time Morse decoder with Goertzel DSP
+• WAV file analysis (offline)
+• Koch method + Farnsworth timing lessons
+• Full character reference and Q-codes
+• Dark / Light / System theme
+• No ads, no tracking, fully offline

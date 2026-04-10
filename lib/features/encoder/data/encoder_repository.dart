@@ -1,1 +1,0 @@
-// Encoder data layer
