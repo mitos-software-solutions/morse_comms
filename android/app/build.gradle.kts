@@ -64,12 +64,3 @@ android {
 flutter {
     source = "../.."
 }
-
-// Exclude Google Play Core (pulled in transitively by Flutter's deferred components support).
-// This app does not use deferred components, and F-Droid rejects APKs containing Play Core classes.
-configurations.all {
-    exclude(group = "com.google.android.play", module = "core")
-    exclude(group = "com.google.android.play", module = "core-ktx")
-    exclude(group = "com.google.android.play", module = "feature-delivery")
-    exclude(group = "com.google.android.play", module = "feature-delivery-ktx")
-}

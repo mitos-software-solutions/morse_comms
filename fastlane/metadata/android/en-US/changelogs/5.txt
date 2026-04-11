@@ -1,0 +1,2 @@
+Fix F-Droid build: remove overly broad ProGuard keep rules that caused Google Play Core
+classes to be bundled in the APK. No functional changes.
