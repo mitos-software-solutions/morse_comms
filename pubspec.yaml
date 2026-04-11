@@ -60,6 +60,9 @@ dev_dependencies:
   # App icon generation
   flutter_launcher_icons: ^0.14.0
 
+  # Windows MSIX installer packaging
+  msix: ^3.16.0
+
 flutter_launcher_icons:
   android: true
   ios: true
@@ -85,3 +88,19 @@ flutter:
     - assets/examples/alphabet_20wpm.wav
     - assets/examples/hello_world_20db.wav
     - assets/examples/stereo_hello_world_48k.wav
+
+msix_config:
+  display_name: Morse Comms
+  publisher_display_name: Mitos Software Solutions
+  # Reverse-domain identity — must be unique per app in the MSIX ecosystem.
+  identity_name: com.mitossoftwaresolutions.morsecomms
+  # CN must be present even for unsigned packages (not validated without a cert).
+  publisher: CN=MitosSoftwareSolutions
+  logo_path: assets\icon\Morse_Comms_icon.png
+  # runFullTrust: required for all Flutter Windows desktop apps.
+  # microphone: required for the Morse decoder screen.
+  capabilities: microphone,runFullTrust
+  languages: en-us
+  # Unsigned — no certificate. Windows will show a SmartScreen prompt on first install.
+  sign_msix: false
+  output_name: morse_comms

@@ -20,16 +20,28 @@ Prepper-focused Morse code app — fully offline, free, useful for survival and 
 | Platform | Where to get it |
 |----------|-----------------|
 | Android | Play Store (listing pending) · F-Droid (listing pending) · [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (APK) |
-| Windows | [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (zip — SmartScreen may warn on first run; click "More info → Run anyway") |
+| Windows | [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) — choose your format: |
+| | **MSIX installer** (`.msix`) — double-click to install; appears in Start menu and Add/Remove Programs |
+| | **Portable zip** (`.zip`) — extract anywhere and run `morse_comms.exe`, no install needed |
+
+> **Windows SmartScreen:** Both formats are unsigned (free, open-source project). On first run/install Windows may show "Windows protected your PC" — click **More info → Run anyway**. This warning fades as the app builds download reputation.
 
 Releases are built automatically by CI on every merge to `main`.
 
 ## Build
 
-**Release Windows:**
+**Release Windows (portable zip):**
 ```bash
 flutter build windows --release
 # Output: build/windows/x64/runner/Release/morse_comms.exe
+```
+
+**Release Windows (MSIX installer):**
+```bash
+flutter build windows --release
+dart run msix:create
+# Output: build/windows/x64/runner/Release/morse_comms.msix
+# Double-click the .msix to install. Unsigned — SmartScreen will warn on first install.
 ```
 
 **Release AAB (for Play Store upload):**

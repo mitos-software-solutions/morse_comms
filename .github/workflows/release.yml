@@ -66,18 +66,31 @@ jobs:
       - run: flutter pub get
       - run: flutter build windows --release
 
-      - name: Zip Release folder
+      - name: Create MSIX installer
+        run: dart run msix:create
+
+      - name: Rename artifacts
         shell: pwsh
         run: |
           $ver = "${{ needs.prepare.outputs.version }}"
+          # Portable zip (includes the .msix so users can also install from the zip)
           Compress-Archive `
-            -Path   "build\windows\x64\runner\Release\*" `
+            -Path            "build\windows\x64\runner\Release\*" `
             -DestinationPath "morse_comms-windows-v$ver.zip"
+          # Standalone MSIX installer
+          Copy-Item `
+            "build\windows\x64\runner\Release\morse_comms.msix" `
+            "morse_comms-windows-v$ver.msix"
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-zip
           path: morse_comms-windows-v${{ needs.prepare.outputs.version }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msix
+          path: morse_comms-windows-v${{ needs.prepare.outputs.version }}.msix
 
   # ── 4. Android build ──────────────────────────────────────────────────────
   #
@@ -145,6 +158,10 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: windows-msix
+
+      - uses: actions/download-artifact@v4
+        with:
           name: android-apk
 
       - name: Create GitHub Release
@@ -155,4 +172,5 @@ jobs:
           generate_release_notes: true
           files: |
             morse_comms-windows-v${{ needs.prepare.outputs.version }}.zip
+            morse_comms-windows-v${{ needs.prepare.outputs.version }}.msix
             morse_comms-android-v${{ needs.prepare.outputs.version }}.apk
