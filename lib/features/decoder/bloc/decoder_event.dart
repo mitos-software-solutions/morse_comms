@@ -8,8 +8,14 @@ final class DecoderListenRequested extends DecoderEvent {}
 /// User pressed Stop — stop recording and trigger offline analysis.
 final class DecoderStopRequested extends DecoderEvent {}
 
-/// User pressed Save Recording.
+/// User pressed Save Recording (Android/iOS) — save to temp then share sheet.
 final class DecoderSaveRequested extends DecoderEvent {}
+
+/// User chose a save path via a native file dialog (desktop platforms).
+final class DecoderSaveToPathRequested extends DecoderEvent {
+  final String path;
+  DecoderSaveToPathRequested(this.path);
+}
 
 /// User pressed Share — export the saved WAV via the platform share sheet.
 final class DecoderShareRequested extends DecoderEvent {}
