@@ -1,7 +1,9 @@
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../player/player_service.dart';
@@ -44,13 +46,32 @@ class _DecoderView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // On Android/iOS the save flow writes to a temp file then opens the share
+    // sheet so the user can pick Downloads/Files.  On desktop platforms the
+    // native save dialog is used directly, so no share sheet is needed here.
+    final autoShare = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    final isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
     return BlocListener<DecoderBloc, DecoderState>(
       listenWhen: (p, c) => c.savedPath != null && p.savedPath != c.savedPath,
       listener: (context, state) {
-        Share.shareXFiles(
-          [XFile(state.savedPath!, mimeType: 'audio/wav')],
-          subject: 'Morse Recording',
-        );
+        if (autoShare) {
+          Share.shareXFiles(
+            [XFile(state.savedPath!, mimeType: 'audio/wav')],
+            subject: 'Morse Recording',
+          );
+        } else if (isDesktop) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Saved to ${state.savedPath!}'),
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -172,7 +193,7 @@ class _DecoderView extends StatelessWidget {
                       builder: (context, state) {
                         final path = state.savedPath;
                         if (path == null) return const SizedBox.shrink();
-                        final filename = path.split('/').last;
+                        final filename = path.split(RegExp(r'[/\\]')).last;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
@@ -421,7 +442,7 @@ class _AudioToolbar extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.save_alt),
                   tooltip: 'Save',
-                  onPressed: () => _showSaveDialog(context),
+                  onPressed: () => _onSavePressed(context),
                 ),
               ],
             ],
@@ -431,33 +452,81 @@ class _AudioToolbar extends StatelessWidget {
     );
   }
 
-  void _showSaveDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Save to Device'),
-        content: const Text(
-          'A share sheet will open.\n\n'
-          '• Android: tap "Save to Downloads" or "My Files"\n'
-          '• iOS: tap "Save to Files"\n\n'
-          'The WAV file will then be available in your device\'s file manager '
-          'and can be reloaded here via the folder icon.',
+  Future<void> _onSavePressed(BuildContext context) async {
+    final isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
+
+    if (isDesktop) {
+      final now = DateTime.now();
+      final filename =
+          'morse_${now.year}${_pad(now.month)}${_pad(now.day)}'
+          '_${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}.wav';
+      try {
+        final dir = await getDownloadsDirectory() ??
+            await getApplicationDocumentsDirectory();
+        final path = '${dir.path}/$filename';
+        if (!context.mounted) return;
+        context.read<DecoderBloc>().add(DecoderSaveToPathRequested(path));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save file: $e')),
+        );
+      }
+    } else {
+      if (!context.mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Save to Device'),
+          content: Text(_saveDialogBody()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                context.read<DecoderBloc>().add(DecoderSaveRequested());
+              },
+              child: const Text('Continue'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              context.read<DecoderBloc>().add(DecoderSaveRequested());
-            },
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
+  }
+
+  String _pad(int n) => n.toString().padLeft(2, '0');
+
+  String _saveDialogBody() {
+    if (kIsWeb) {
+      return 'The WAV file will be downloaded to your browser\'s default '
+          'downloads folder and can be reloaded here via the folder icon.';
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.windows:
+        return 'A save dialog will open.\n\n'
+            'Choose a location such as your Documents or Downloads folder.\n\n'
+            'The WAV file can be reloaded here via the folder icon.';
+      case TargetPlatform.iOS:
+        return 'A share sheet will open.\n\n'
+            '• iOS: tap "Save to Files"\n\n'
+            'The WAV file will then be available in the Files app '
+            'and can be reloaded here via the folder icon.';
+      case TargetPlatform.macOS:
+        return 'A save dialog will open.\n\n'
+            'Choose a location such as your Documents or Downloads folder.\n\n'
+            'The WAV file can be reloaded here via the folder icon.';
+      default:
+        return 'A share sheet will open.\n\n'
+            '• Android: tap "Save to Downloads" or "My Files"\n\n'
+            'The WAV file will then be available in your device\'s file manager '
+            'and can be reloaded here via the folder icon.';
+    }
   }
 }
 

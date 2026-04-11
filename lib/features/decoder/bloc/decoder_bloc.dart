@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data'; // ignore: depend_on_referenced_packages
 
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -27,6 +28,7 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
     on<DecoderListenRequested>(_onListen);
     on<DecoderStopRequested>(_onStop);
     on<DecoderSaveRequested>(_onSave);
+    on<DecoderSaveToPathRequested>(_onSaveToPath);
     on<DecoderShareRequested>(_onShare);
     on<DecoderFileAnalysisRequested>(_onAnalyzeFile);
     on<DecoderCleared>(_onClear);
@@ -119,6 +121,23 @@ class DecoderBloc extends Bloc<DecoderEvent, DecoderState> {
     try {
       final savedPath = await _service.saveRecording(filename);
       add(_SaveCompleted(savedPath));
+    } catch (e) {
+      add(_ErrorOccurred(e.toString()));
+    }
+  }
+
+  Future<void> _onSaveToPath(
+    DecoderSaveToPathRequested event,
+    Emitter<DecoderState> emit,
+  ) async {
+    // Use state.audioBytes (correct for both mic recordings and loaded files)
+    // rather than the service's internal _pcmBytes, which is only populated
+    // from mic recordings.
+    final bytes = state.audioBytes;
+    if (bytes == null) return;
+    try {
+      await File(event.path).writeAsBytes(bytes);
+      add(_SaveCompleted(event.path));
     } catch (e) {
       add(_ErrorOccurred(e.toString()));
     }

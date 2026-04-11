@@ -128,6 +128,15 @@ class DecoderService {
     return path;
   }
 
+  /// Write the recorded audio as a WAV to [path] chosen by the user.
+  ///
+  /// Used on desktop platforms where a native save dialog provides the path
+  /// directly, bypassing the share sheet.
+  Future<void> saveRecordingAs(String path) async {
+    final wav = _buildWav(Uint8List.fromList(_pcmBytes));
+    await File(path).writeAsBytes(wav);
+  }
+
   /// Share a WAV file via the platform share sheet.
   ///
   /// [path] is the full file path returned by [saveRecording].
@@ -164,22 +173,28 @@ class DecoderService {
   // ── Internal ───────────────────────────────────────────────────────────────
 
   Future<void> _startAudio() async {
-    final stream = await _recorder.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: _sampleRate,
-        numChannels: 1,
-        // Use the unprocessed audio source on Android to bypass the system's
-        // Noise Suppressor (NS) and Automatic Gain Control (AGC).  These
-        // voice-optimised effects suppress periodic tones (treating them as
-        // "noise") and pump gain during silence, both of which corrupt Morse
-        // timing and amplitude — making calibration and threshold detection
-        // unreliable.  Requires Android N (API 24+).
-        androidConfig: AndroidRecordConfig(
-          audioSource: AndroidAudioSource.unprocessed,
-        ),
-      ),
+    // Use the unprocessed audio source on Android to bypass the system's
+    // Noise Suppressor (NS) and Automatic Gain Control (AGC).  These
+    // voice-optimised effects suppress periodic tones (treating them as
+    // "noise") and pump gain during silence, both of which corrupt Morse
+    // timing and amplitude — making calibration and threshold detection
+    // unreliable.  Requires Android N (API 24+).
+    const baseConfig = RecordConfig(
+      encoder: AudioEncoder.pcm16bits,
+      sampleRate: _sampleRate,
+      numChannels: 1,
     );
+    final config = (defaultTargetPlatform == TargetPlatform.android && !kIsWeb)
+        ? const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: _sampleRate,
+            numChannels: 1,
+            androidConfig: AndroidRecordConfig(
+              audioSource: AndroidAudioSource.unprocessed,
+            ),
+          )
+        : baseConfig;
+    final stream = await _recorder.startStream(config);
     _audioSub = stream.listen(_onBytes);
     _isAudioRunning = true;
   }

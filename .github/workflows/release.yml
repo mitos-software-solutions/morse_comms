@@ -1,0 +1,158 @@
+name: Release
+
+# Triggers on every merge to main. The version in pubspec.yaml is the source
+# of truth — bump it before merging develop → main.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── 1. Extract version ────────────────────────────────────────────────────
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag:     ${{ steps.ver.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from pubspec.yaml
+        id: ver
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml \
+            | sed 's/version: //' \
+            | cut -d'+' -f1 \
+            | tr -d ' ')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION"    >> "$GITHUB_OUTPUT"
+
+  # ── 2. Tests (shared gate for both build jobs) ────────────────────────────
+  test:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze --fatal-infos
+      - run: flutter test --coverage
+
+      - uses: codecov/codecov-action@v4
+        with:
+          files: coverage/lcov.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # ── 3. Windows build ──────────────────────────────────────────────────────
+  build-windows:
+    needs: [prepare, test]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter build windows --release
+
+      - name: Zip Release folder
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.prepare.outputs.version }}"
+          Compress-Archive `
+            -Path   "build\windows\x64\runner\Release\*" `
+            -DestinationPath "morse_comms-windows-v$ver.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: morse_comms-windows-v${{ needs.prepare.outputs.version }}.zip
+
+  # ── 4. Android build ──────────────────────────────────────────────────────
+  #
+  # Required secrets (Settings → Secrets → Actions):
+  #   KEYSTORE_BASE64   — base64-encoded .jks keystore file
+  #                       generate with: base64 -w0 your-keystore.jks
+  #   KEY_ALIAS         — key alias inside the keystore
+  #   KEY_PASSWORD      — key password
+  #   STORE_PASSWORD    — keystore password
+  build-android:
+    needs: [prepare, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Write keystore + key.properties
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" \
+            | base64 --decode > android/app/upload-keystore.jks
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.STORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=upload-keystore.jks
+          EOF
+
+      - run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             morse_comms-android-v${{ needs.prepare.outputs.version }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: morse_comms-android-v${{ needs.prepare.outputs.version }}.apk
+
+  # ── 5. Create GitHub Release ──────────────────────────────────────────────
+  release:
+    needs: [prepare, build-windows, build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:               ${{ needs.prepare.outputs.tag }}
+          name:                   ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            morse_comms-windows-v${{ needs.prepare.outputs.version }}.zip
+            morse_comms-android-v${{ needs.prepare.outputs.version }}.apk

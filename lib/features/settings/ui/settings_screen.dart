@@ -449,7 +449,9 @@ class _SttLanguageTile extends StatelessWidget {
                     'Android → Settings → System → Languages & input → '
                     'On-device recognition → Add a language\n\n'
                     'iOS → Settings → General → Language & Region → '
-                    'add the language, then enable it in Keyboard settings.',
+                    'add the language, then enable it in Keyboard settings.\n\n'
+                    'Windows → Settings → Time & language → Speech → '
+                    'Add voices',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context)
                               .colorScheme
