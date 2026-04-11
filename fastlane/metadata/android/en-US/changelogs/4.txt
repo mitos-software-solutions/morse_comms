@@ -1,0 +1,2 @@
+Exclude Google Play Core library to comply with F-Droid build requirements.
+No functional changes.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../bloc/settings_cubit.dart';
@@ -49,23 +50,33 @@ class SettingsScreen extends StatelessWidget {
               const _SupportSection(),
               const SizedBox(height: 16),
               _SectionHeader('About'),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('Version'),
-                trailing: Text(
-                  '0.1.0',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.article_outlined),
-                title: const Text('Open-source licences'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: 'Morse Comms',
-                  applicationVersion: '0.1.0',
-                ),
+              FutureBuilder<PackageInfo>(
+                future: PackageInfo.fromPlatform(),
+                builder: (context, snapshot) {
+                  final version = snapshot.data?.version ?? '—';
+                  return Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: const Text('Version'),
+                        trailing: Text(
+                          version,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.article_outlined),
+                        title: const Text('Open-source licences'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => showLicensePage(
+                          context: context,
+                          applicationName: 'Morse Comms',
+                          applicationVersion: version,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           );
