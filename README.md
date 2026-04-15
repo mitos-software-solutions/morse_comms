@@ -6,8 +6,8 @@
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20Linux-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-<!-- TODO: replace # with real store links once available -->
-[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="60">](#)
+<!-- TODO: replace F-Droid # with real link once listing goes live -->
+[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="60">](https://play.google.com/store/apps/details?id=com.mitossoftwaresolutions.morsecomms)
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="60">](#)
 
 Prepper-focused Morse code app — fully offline, free, useful for survival and learning.
@@ -19,7 +19,7 @@ Prepper-focused Morse code app — fully offline, free, useful for survival and 
 
 | Platform | Where to get it |
 |----------|-----------------|
-| Android | Play Store (listing pending) · F-Droid (listing pending) · [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (APK) |
+| Android | [Google Play](https://play.google.com/store/apps/details?id=com.mitossoftwaresolutions.morsecomms) · F-Droid (listing pending) · [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (APK) |
 | Windows | [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (zip — SmartScreen may warn on first run; click "More info → Run anyway") |
 | Linux | [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (tar.gz — extract and run `morse_comms`) · Snap/Flathub (planned) |
 
