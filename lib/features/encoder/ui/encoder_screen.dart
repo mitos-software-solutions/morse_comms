@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -82,11 +83,13 @@ class _EncoderViewState extends State<_EncoderView> {
                   Expanded(
                     child: TextField(
                       controller: _controller,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Enter text',
-                        hintText: 'Type or tap the mic',
-                        border: OutlineInputBorder(),
-                        suffixIcon: Icon(Icons.keyboard),
+                        hintText: defaultTargetPlatform == TargetPlatform.linux
+                            ? 'Type text to encode'
+                            : 'Type or tap the mic',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: const Icon(Icons.keyboard),
                       ),
                       textCapitalization: TextCapitalization.characters,
                       onChanged: (text) => context
@@ -94,57 +97,61 @@ class _EncoderViewState extends State<_EncoderView> {
                           .add(EncoderTextChanged(text)),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  // --- Mic button ---
-                  BlocBuilder<EncoderBloc, EncoderState>(
-                    buildWhen: (prev, cur) =>
-                        prev.sttStatus != cur.sttStatus,
-                    builder: (context, state) {
-                      final isListening =
-                          state.sttStatus == SttStatus.listening;
-                      return SizedBox(
-                        height: 56,
-                        child: FilledButton(
-                          onPressed: () {
-                            if (isListening) {
-                              context
-                                  .read<EncoderBloc>()
-                                  .add(EncoderSttStopRequested());
-                            } else {
-                              context
-                                  .read<EncoderBloc>()
-                                  .add(EncoderSttStartRequested());
-                            }
-                          },
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            backgroundColor: isListening
-                                ? Theme.of(context).colorScheme.error
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .primaryContainer,
-                            foregroundColor: isListening
-                                ? Theme.of(context).colorScheme.onError
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onPrimaryContainer,
+                  if (defaultTargetPlatform != TargetPlatform.linux) ...[
+                    const SizedBox(width: 10),
+                    // --- Mic button ---
+                    BlocBuilder<EncoderBloc, EncoderState>(
+                      buildWhen: (prev, cur) =>
+                          prev.sttStatus != cur.sttStatus,
+                      builder: (context, state) {
+                        final isListening =
+                            state.sttStatus == SttStatus.listening;
+                        return SizedBox(
+                          height: 56,
+                          child: FilledButton(
+                            onPressed: () {
+                              if (isListening) {
+                                context
+                                    .read<EncoderBloc>()
+                                    .add(EncoderSttStopRequested());
+                              } else {
+                                context
+                                    .read<EncoderBloc>()
+                                    .add(EncoderSttStartRequested());
+                              }
+                            },
+                            style: FilledButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 14),
+                              backgroundColor: isListening
+                                  ? Theme.of(context).colorScheme.error
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .primaryContainer,
+                              foregroundColor: isListening
+                                  ? Theme.of(context).colorScheme.onError
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer,
+                            ),
+                            child: Icon(
+                              isListening ? Icons.mic : Icons.mic_none,
+                              size: 28,
+                            ),
                           ),
-                          child: Icon(
-                            isListening ? Icons.mic : Icons.mic_none,
-                            size: 28,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ),
 
-              // --- Listening / error status ---
-              BlocBuilder<EncoderBloc, EncoderState>(
-                buildWhen: (prev, cur) => prev.sttStatus != cur.sttStatus,
-                builder: (context, state) {
-                  if (state.sttStatus == SttStatus.listening) {
+              // --- Listening / error status (hidden on Linux — no STT support) ---
+              if (defaultTargetPlatform != TargetPlatform.linux)
+                BlocBuilder<EncoderBloc, EncoderState>(
+                  buildWhen: (prev, cur) => prev.sttStatus != cur.sttStatus,
+                  builder: (context, state) {
+                    if (state.sttStatus == SttStatus.listening) {
                     return Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Row(

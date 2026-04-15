@@ -79,7 +79,45 @@ jobs:
           name: windows-zip
           path: morse_comms-windows-v${{ needs.prepare.outputs.version }}.zip
 
-  # ── 4. Android build ──────────────────────────────────────────────────────
+  # ── 4. Linux build ───────────────────────────────────────────────────────
+  #
+  # Runtime audio deps for end-users: pulseaudio-utils + ffmpeg (or pipewire-pulse).
+  # Build deps installed below are compile-time only.
+  build-linux:
+    needs: [prepare, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'
+          channel: stable
+          cache: true
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            clang cmake ninja-build \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            libasound2-dev libpulse-dev
+
+      - run: flutter pub get
+      - run: flutter build linux --release
+
+      - name: Package as tar.gz
+        run: |
+          ver="${{ needs.prepare.outputs.version }}"
+          tar -czf "morse_comms-linux-v${ver}.tar.gz" \
+            -C build/linux/x64/release/bundle .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-tarball
+          path: morse_comms-linux-v${{ needs.prepare.outputs.version }}.tar.gz
+
+  # ── 5. Android build ──────────────────────────────────────────────────────
   #
   # Required secrets (Settings → Secrets → Actions):
   #   KEYSTORE_BASE64   — base64-encoded .jks keystore file
@@ -130,9 +168,9 @@ jobs:
           name: android-apk
           path: morse_comms-android-v${{ needs.prepare.outputs.version }}.apk
 
-  # ── 5. Create GitHub Release ──────────────────────────────────────────────
+  # ── 6. Create GitHub Release ──────────────────────────────────────────────
   release:
-    needs: [prepare, build-windows, build-android]
+    needs: [prepare, build-windows, build-linux, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -142,6 +180,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows-zip
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-tarball
 
       - uses: actions/download-artifact@v4
         with:
@@ -155,4 +197,5 @@ jobs:
           generate_release_notes: true
           files: |
             morse_comms-windows-v${{ needs.prepare.outputs.version }}.zip
+            morse_comms-linux-v${{ needs.prepare.outputs.version }}.tar.gz
             morse_comms-android-v${{ needs.prepare.outputs.version }}.apk
