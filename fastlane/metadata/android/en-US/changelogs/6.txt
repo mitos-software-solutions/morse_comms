@@ -1,0 +1,1 @@
+Added Linux desktop support. Fixed GitHub Actions CI pipeline and improved branch protection rules.
