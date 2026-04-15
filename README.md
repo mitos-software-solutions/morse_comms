@@ -3,7 +3,7 @@
 [![Tests](https://github.com/mitos-software-solutions/morse_comms/actions/workflows/test.yml/badge.svg)](https://github.com/mitos-software-solutions/morse_comms/actions/workflows/test.yml)
 [![Release](https://github.com/mitos-software-solutions/morse_comms/actions/workflows/release.yml/badge.svg)](https://github.com/mitos-software-solutions/morse_comms/actions/workflows/release.yml)
 [![Coverage](https://codecov.io/gh/mitos-software-solutions/morse_comms/branch/main/graph/badge.svg)](https://app.codecov.io/gh/mitos-software-solutions/morse_comms)
-![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Windows-blue)
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20Linux-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 <!-- TODO: replace # with real store links once available -->
@@ -21,6 +21,9 @@ Prepper-focused Morse code app — fully offline, free, useful for survival and 
 |----------|-----------------|
 | Android | Play Store (listing pending) · F-Droid (listing pending) · [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (APK) |
 | Windows | [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (zip — SmartScreen may warn on first run; click "More info → Run anyway") |
+| Linux | [GitHub Releases](https://github.com/mitos-software-solutions/morse_comms/releases) (tar.gz — extract and run `morse_comms`) · Snap/Flathub (planned) |
+
+> **Linux audio:** Microphone decoding requires PulseAudio or PipeWire (standard on Ubuntu, Fedora, Arch). Install runtime deps if missing: `sudo apt install pulseaudio-utils ffmpeg`
 
 Releases are built automatically by CI on every merge to `main`.
 
@@ -30,6 +33,13 @@ Releases are built automatically by CI on every merge to `main`.
 ```bash
 flutter build windows --release
 # Output: build/windows/x64/runner/Release/morse_comms.exe
+```
+
+**Release Linux:**
+```bash
+sudo apt install clang cmake ninja-build libgtk-3-dev liblzma-dev libasound2-dev libpulse-dev
+flutter build linux --release
+# Output: build/linux/x64/release/bundle/
 ```
 
 **Release AAB (for Play Store upload):**

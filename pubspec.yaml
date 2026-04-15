@@ -75,7 +75,7 @@ flutter_launcher_icons:
     image_path: "icons.png"
   linux:
     generate: true
-    image_path: "icons.png"
+    image_path: "assets/icon/Morse_Comms_icon.png"
 
 flutter:
   uses-material-design: true
