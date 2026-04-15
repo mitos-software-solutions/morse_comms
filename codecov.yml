@@ -1,0 +1,18 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 85%
+        threshold: 2%
+
+ignore:
+  # UI screen files — platform-conditional widget code is not unit-testable
+  - "lib/features/decoder/ui/**"
+  - "lib/features/encoder/ui/**"
+  - "lib/features/lessons/ui/**"
+  - "lib/features/player/ui/**"
+  - "lib/features/settings/ui/**"
+  # App entry point and DI wiring
+  - "lib/main.dart"
+  - "lib/injection_container.dart"
+  - "lib/injection_container.config.dart"

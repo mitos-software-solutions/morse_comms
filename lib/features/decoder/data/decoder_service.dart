@@ -128,15 +128,6 @@ class DecoderService {
     return path;
   }
 
-  /// Write the recorded audio as a WAV to [path] chosen by the user.
-  ///
-  /// Used on desktop platforms where a native save dialog provides the path
-  /// directly, bypassing the share sheet.
-  Future<void> saveRecordingAs(String path) async {
-    final wav = _buildWav(Uint8List.fromList(_pcmBytes));
-    await File(path).writeAsBytes(wav);
-  }
-
   /// Share a WAV file via the platform share sheet.
   ///
   /// [path] is the full file path returned by [saveRecording].

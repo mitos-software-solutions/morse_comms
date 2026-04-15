@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -38,13 +39,15 @@ class SettingsScreen extends StatelessWidget {
                 value: state.sideTone,
                 onChanged: cubit.setSideTone,
               ),
-              const SizedBox(height: 16),
-              _SectionHeader('Speech Recognition'),
-              _SttLanguageTile(
-                currentLocaleId: state.sttLocaleId,
-                locales: state.sttLocales,
-                onChanged: cubit.setSttLocaleId,
-              ),
+              if (defaultTargetPlatform != TargetPlatform.linux) ...[
+                const SizedBox(height: 16),
+                _SectionHeader('Speech Recognition'),
+                _SttLanguageTile(
+                  currentLocaleId: state.sttLocaleId,
+                  locales: state.sttLocales,
+                  onChanged: cubit.setSttLocaleId,
+                ),
+              ],
               const SizedBox(height: 16),
               _SectionHeader('Support & Contribute'),
               const _SupportSection(),
@@ -451,7 +454,8 @@ class _SttLanguageTile extends StatelessWidget {
                     'iOS → Settings → General → Language & Region → '
                     'add the language, then enable it in Keyboard settings.\n\n'
                     'Windows → Settings → Time & language → Speech → '
-                    'Add voices',
+                    'Add voices\n\n'
+                    'Linux → Speech recognition is not supported on Linux.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context)
                               .colorScheme

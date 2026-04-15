@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -302,6 +303,12 @@ void main() {
         final event = DecoderAudioPlaybackCompleted();
         expect(event, isNotNull);
       });
+
+      test('DecoderSaveToPathRequested event exists and holds path', () {
+        final event = DecoderSaveToPathRequested('/tmp/test.wav');
+        expect(event, isNotNull);
+        expect(event.path, equals('/tmp/test.wav'));
+      });
     });
 
     group('isPlayingAudio', () {
@@ -529,6 +536,45 @@ void main() {
             .thenThrow(Exception('disk full'));
         final states = await collectStates(
           () async => bloc.add(DecoderSaveRequested()),
+        );
+        expect(states.last.errorMessage, isNotNull);
+      });
+
+      // ── DecoderSaveToPathRequested ──────────────────────────────────────
+
+      test('saveToPath — audioBytes null → no state change', () async {
+        // No audioBytes in initial state
+        final states = await collectStates(
+          () async =>
+              bloc.add(DecoderSaveToPathRequested('/tmp/unreachable.wav')),
+        );
+        expect(states, isEmpty);
+      });
+
+      test('saveToPath — writes audioBytes to path → savedPath set', () async {
+        final dir = Directory.systemTemp.createTempSync('decoder_bloc_test_');
+        final path = '${dir.path}/test.wav';
+        final bytes = makeMinimalWav();
+        bloc.emit(bloc.state.copyWith(audioBytes: bytes));
+        try {
+          final states = await collectStates(
+            () async => bloc.add(DecoderSaveToPathRequested(path)),
+          );
+          expect(states.last.savedPath, equals(path));
+          expect(File(path).existsSync(), isTrue);
+          expect(File(path).lengthSync(), equals(bytes.length));
+        } finally {
+          dir.deleteSync(recursive: true);
+        }
+      });
+
+      test('saveToPath — write throws → errorMessage set', () async {
+        final bytes = makeMinimalWav();
+        bloc.emit(bloc.state.copyWith(audioBytes: bytes));
+        // Path into a non-existent directory forces an OS error.
+        const badPath = '/no/such/directory/test.wav';
+        final states = await collectStates(
+          () async => bloc.add(DecoderSaveToPathRequested(badPath)),
         );
         expect(states.last.errorMessage, isNotNull);
       });
