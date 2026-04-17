@@ -106,6 +106,25 @@ jobs:
       - run: flutter pub get
       - run: flutter build linux --release
 
+      - name: Bundle libFLAC and launcher script
+        run: |
+          bundle=build/linux/x64/release/bundle
+
+          # flutter_soloud prebuilt plugin links against libFLAC.so.14; copy
+          # the system library under that name so users need no extra installs.
+          flac_lib=$(find /usr/lib -name 'libFLAC.so.*' ! -name 'libFLAC.so' \
+                       | sort | tail -1)
+          cp "$flac_lib" "$bundle/lib/libFLAC.so.14"
+
+          # Wrapper script so users can run ./morse_comms.sh without setting
+          # LD_LIBRARY_PATH manually.
+          cat > "$bundle/morse_comms.sh" << 'EOF'
+          #!/bin/bash
+          cd "$(dirname "$0")"
+          LD_LIBRARY_PATH="$(pwd)/lib:$LD_LIBRARY_PATH" exec ./morse_comms "$@"
+          EOF
+          chmod +x "$bundle/morse_comms.sh"
+
       - name: Package as tar.gz
         run: |
           ver="${{ needs.prepare.outputs.version }}"
