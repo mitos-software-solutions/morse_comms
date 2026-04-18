@@ -183,26 +183,103 @@ They live under `test/features/**` and run with the regular `flutter test` comma
 
 ---
 
-## Planned Level: Integration Tests (`integration_test`)
+## Level: Integration Tests (`integration_test`)
 
-**Not implemented yet — future work.**
+**Planned — not yet implemented.**
 
-Integration tests will run on **real devices/emulators** (Android, Windows, Linux) and drive the full app:
+Integration tests drive the full running app (real platform channels, real widget tree, real routing) using the `integration_test` package and the same `find` / `tester` API as widget tests.
 
-- **Scope**
-  - High-value end-to-end flows, for example:
-    - Encoder flow: open app → go to Encoder → enter text → play tones.
-    - Decoder flow: (with stubbed or sample audio) open app → Decoder → start listening → see decoded text.
-    - Lessons flow: start a drill → complete rounds → see progress updated.
-    - Settings flow: change WPM/tone frequency/theme → verify effects in other screens.
-  - Exercise plugins and platform channels:
-    - `record` (mic input) paths.
-    - `speech_to_text` behavior where feasible.
-    - `flutter_soloud` playback wiring.
+---
 
-- **Benefits**
-  - Verifies that the app works as expected on **real hardware**, across platforms.
-  - Good fit for CI on device farms or local emulators.
+### CI target strategy
+
+| Runner | Target | Cost | What it can test |
+|--------|--------|------|-----------------|
+| `ubuntu-latest` (existing) | Flutter web / Chrome | Free, fast | Navigation, encoder, decoder file-load, settings, lessons |
+| `windows-latest` (new job) | Windows desktop | ~2× slower | Same flows + Windows-specific save dialog |
+| Physical device / emulator | Android | Not in CI | Mic recording, real STT, real audio |
+
+**Phase 1** targets the existing `ubuntu-latest` runner using `-d chrome`. No new runner cost, runs alongside unit tests. Flows that require a microphone, real audio output, or a native file picker are explicitly out of scope for CI and deferred to device-level testing.
+
+---
+
+### Setup required
+
+1. **`pubspec.yaml`** — add to `dev_dependencies`:
+   ```yaml
+   integration_test:
+     sdk: flutter
+   ```
+
+2. **Directory** — create `integration_test/` at the repo root (sibling of `test/`).
+
+3. **`integration_test/app_test.dart`** — entry point that calls `IntegrationTestWidgetsFlutterBinding.ensureInitialized()` and bootstraps the real app (`main()`-style setup: SharedPreferences, PlayerService stub or real, SettingsCubit with `SttLocaleLoaderImpl`).
+
+4. **`.github/workflows/test.yml`** — add a second job (or extend the existing one) that runs:
+   ```
+   flutter test integration_test/ -d chrome --browser-name chrome
+   ```
+   Keep unit tests on `ubuntu-latest`; integration tests can share the same job or run separately.
+
+---
+
+### Flows to implement (ordered by value / feasibility)
+
+#### 1. App navigation — `integration_test/navigation_test.dart`
+- App starts on Encoder tab (`Morse Encoder` title visible).
+- Tap each bottom nav item in order (Decoder → Learn → Settings → Encoder) and verify the primary screen title for each.
+- **CI safe:** yes. No audio, no permissions.
+
+#### 2. Encoder flow — `integration_test/encoder_flow_test.dart`
+- Type `SOS` into the text field.
+- Verify Morse output `... --- ...` is displayed.
+- Verify Play button is enabled.
+- Verify the output card disappears after clearing the field.
+- **CI safe:** yes. Does not tap Play (audio playback has no output device in CI).
+
+#### 3. Decoder: Load Example flow — `integration_test/decoder_flow_test.dart`
+- Navigate to Decoder tab.
+- Tap the "Load Example" popup button (flask icon).
+- Select "SOS (20 WPM)" from the menu.
+- Verify the Analyzing spinner appears then resolves.
+- Verify decoded text `SOS` is shown on screen.
+- Verify the Play and Save buttons appear (audio bytes are available).
+- **CI safe:** yes. Uses `rootBundle` — no file picker, no microphone.
+- **Note:** this test exercises the full DSP pipeline end-to-end on a real device target.
+
+#### 4. Settings: WPM persistence — `integration_test/settings_flow_test.dart`
+- Navigate to Settings.
+- Drag the WPM slider to a new value (e.g. 30 WPM).
+- Navigate to Encoder and back to Settings.
+- Verify the WPM label still shows the updated value (SharedPreferences round-trip).
+- **CI safe:** yes.
+
+#### 5. Lessons: Browse and enter a drill — `integration_test/lessons_flow_test.dart`
+- Navigate to Learn tab.
+- Verify Koch Method and Farnsworth Method cards are visible.
+- Tap Koch Method → verify the Koch lesson list screen opens.
+- Tap the reference icon → verify Reference screen opens with Characters tab.
+- **CI safe:** yes. Does not start audio drills.
+
+---
+
+### Intentionally out of scope for CI
+
+| Feature | Reason | How to test |
+|---------|--------|-------------|
+| Live recording (mic) | No microphone in CI | Manual / device farm |
+| Audio playback (SoLoud) | No output device in CI | Manual / device farm |
+| Real STT locales | Platform-specific STT engine | Manual on Android/Windows |
+| Native file picker | Requires OS file dialog | Manual / Windows device |
+| Save-to-path (desktop) | Requires writable fs dialog | Manual on Windows |
+
+---
+
+### Known integration test constraints
+
+- **`compute` isolates on web:** Flutter web does not support true Dart isolates; `compute()` falls back to running inline. The DSP pipeline will still complete correctly but will block the UI thread briefly during analysis. This is acceptable for tests but is a known difference from native.
+- **`flutter_soloud` on web:** `PlayerService.init()` may throw or no-op if no audio context is available in a headless Chrome runner. The integration test bootstrap should catch and swallow this error so tests can continue without audio.
+- **SharedPreferences on web:** uses `localStorage`; state is isolated per test run by default.
 
 ---
 
@@ -230,7 +307,8 @@ Golden tests record and compare **image snapshots** of widgets or screens:
   - Keep strengthening **core** and **feature logic** tests in `test/core/**` and `test/features/**` when adding new behavior.
 
 - **Medium term**
-  - Introduce **`integration_test`** flows for critical paths (encoder, lessons, settings).
+  - Implement the five **integration test** flows above (navigation, encoder, decoder file-load, settings persistence, lessons browse).
+  - Add a `windows-latest` CI job for Windows-specific paths (save dialog, Windows STT).
 
 - **Long term**
   - Add **golden tests** for visual stability if UI changes become frequent.
