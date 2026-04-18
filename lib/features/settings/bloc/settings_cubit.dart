@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 
 import '../data/settings_repository.dart';
+import '../data/stt_locale_loader.dart';
 import 'settings_state.dart';
 
 export 'settings_state.dart';
 
 class SettingsCubit extends Cubit<SettingsState> {
   final SettingsRepository _repo;
-  final _stt = SpeechToText();
+  final SttLocaleLoader _localeLoader;
   bool _sttLocalesLoaded = false;
 
-  SettingsCubit(this._repo)
-      : super(SettingsState(
+  SettingsCubit(this._repo, {SttLocaleLoader? localeLoader})
+      : _localeLoader = localeLoader ?? SttLocaleLoaderImpl(),
+        super(SettingsState(
           themeMode: _repo.themeMode,
           wpm: _repo.wpm,
           toneFrequency: _repo.toneFrequency,
@@ -52,15 +53,8 @@ class SettingsCubit extends Cubit<SettingsState> {
   Future<void> loadSttLocales() async {
     if (_sttLocalesLoaded) return;
     _sttLocalesLoaded = true;
-    final available = await _stt.initialize();
-    if (!available) return;
-    final locales = await _stt.locales();
-    locales.sort((a, b) => a.name.compareTo(b.name));
-    emit(state.copyWith(
-      sttLocales: locales
-          .map((l) => SttLocale(id: l.localeId, name: l.name))
-          .toList(),
-    ));
+    final locales = await _localeLoader.load();
+    if (locales.isEmpty) return;
+    emit(state.copyWith(sttLocales: locales));
   }
-
 }

@@ -40,6 +40,7 @@ flutter test
   - Location: `test/features/**`
   - Examples:
     - `decoder_bloc_test.dart` — full event handler coverage: all 10 public events + `_estimateDurationMs` helper; uses `MockDecoderService` / `MockPlayerService` from `test/helpers/fake_services.dart`.
+    - `decoder_service_test.dart` — real `DecoderService` instantiation tests (no platform calls): `buildRecordingWav()` returns empty on a fresh instance, `recordedFrameCount` starts at 0, `analyzeRecording()` resolves to `(‘’, 0.0)` when nothing was recorded, `signalStream` is a broadcast stream, `onSideTone` wires correctly.
     - `encoder_bloc_test.dart`
     - `settings_cubit_test.dart` and `settings_repository_test.dart`
     - Lessons tests (`lesson_cubit_test.dart`, `farnsworth_cubit_test.dart`, etc.)
@@ -47,6 +48,8 @@ flutter test
     - Use `flutter_test`’s `test(...)` / `blocTest(...)` API.
     - Stub or mock out platform-dependent pieces (audio, speech, shared preferences).
     - `mocktail` used for concrete-class mocking (`MockDecoderService extends Mock implements DecoderService`); register `Uint8List(0)` fallback value for `any()` matchers.
+    - `DecoderService` can be instantiated in unit tests by registering a no-op mock handler for the `record` plugin's method channel (`com.llfbandit.record/messages`). The `create` method must return `0` (the recorder ID); all others return `null`. Only stateful methods (`startListening`, `hasPermission`) need a real device.
+    - `SettingsCubit` accepts an optional `SttLocaleLoader localeLoader` parameter. Tests pass `_FakeSttLocaleLoader` (defined in `settings_cubit_test.dart` and `settings_screen_test.dart`); production uses the default `SttLocaleLoaderImpl` which wraps `SpeechToText`. This removes all platform channel calls from `SettingsCubit` tests. The real locale-loading logic lives in `lib/features/settings/data/stt_locale_loader.dart`.
   - Purpose:
     - Verify state transitions for BLoCs/cubits.
     - Ensure repositories persist and reload data correctly.
@@ -171,7 +174,12 @@ They live under `test/features/**` and run with the regular `flutter test` comma
     - Main sections and controls (appearance, Morse settings, speech recognition, about) are rendered.
     - The theme `SegmentedButton<ThemeMode>` is present and tapping the segments updates `themeMode`.
     - Dragging the WPM slider updates the visible WPM label (no longer `20 WPM` after drag).
+    - Dragging the tone frequency slider updates the Hz label (no longer `600 Hz` after drag).
     - Toggling the side‑tone switch updates the `sideTone` flag in state.
+    - Support & Contribute section renders "Get involved" and "Buy me a coffee?" headings, and both `FilledButton`s (View on GitHub, Buy Me a Coffee) with correct icons, minimum 48×48 touch targets, and accessibility semantics.
+    - About section renders the `ABOUT` header, `Version` tile, and `Open-source licences` tile.
+    - `_LocalePickerDialog`: opens with a `CircularProgressIndicator` when `sttLocales` is empty; shows `RadioListTile`s when locales are pre-seeded; Cancel closes the dialog; tapping a locale updates `sttLocaleId` in state and closes the dialog.
+  - **Note — `_LocalePickerDialog` test setup**: `_openPicker()` fires `loadSttLocales()` without `await`. With `_FakeSttLocaleLoader` this completes instantly with no platform calls. However, the `SpeechToText` singleton (used by `SttLocaleLoaderImpl`) registers a persistent `setMethodCallHandler` the first time it is instantiated anywhere in the test process, which prevents `pumpAndSettle` from draining after a dialog tap. Tests use `pump()` + `pump(Duration(milliseconds: 350))` instead of `pumpAndSettle` after dialog open/close interactions. Test locales use IDs other than the default `'en_US'` to avoid the locale name appearing both in the tile subtitle and inside the dialog.
 
 ---
 
