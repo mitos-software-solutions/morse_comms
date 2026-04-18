@@ -179,7 +179,7 @@ They live under `test/features/**` and run with the regular `flutter test` comma
 
 **Not implemented yet — future work.**
 
-Integration tests will run on **real devices/emulators** (Android and iOS) and drive the full app:
+Integration tests will run on **real devices/emulators** (Android, Windows, Linux) and drive the full app:
 
 - **Scope**
   - High-value end-to-end flows, for example:

@@ -2,11 +2,11 @@
 
 ## Vision
 A prepper-focused Morse code app: fully offline, free, no ads, useful for survival and learning.
-Target: Android-first, iOS same codebase.
+Target: Android, Windows, and Linux.
 
 ## Platform
 **Flutter** (Dart)
-- Single codebase for Android and iOS
+- Single codebase for Android, Windows, and Linux
 - Native performance
 - Good audio/mic ecosystem
 

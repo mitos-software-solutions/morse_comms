@@ -8,7 +8,7 @@ final class DecoderListenRequested extends DecoderEvent {}
 /// User pressed Stop — stop recording and trigger offline analysis.
 final class DecoderStopRequested extends DecoderEvent {}
 
-/// User pressed Save Recording (Android/iOS) — save to temp then share sheet.
+/// User pressed Save Recording (Android) — save to temp then share sheet.
 final class DecoderSaveRequested extends DecoderEvent {}
 
 /// User chose a save path via a native file dialog (desktop platforms).

@@ -446,16 +446,25 @@ class _SttLanguageTile extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Languages shown here are provided by your device\'s '
-                    'speech engine — no downloads needed inside this app.\n\n'
-                    'To add a language:\n'
-                    'Android → Settings → System → Languages & input → '
-                    'On-device recognition → Add a language\n\n'
-                    'iOS → Settings → General → Language & Region → '
-                    'add the language, then enable it in Keyboard settings.\n\n'
-                    'Windows → Settings → Time & language → Speech → '
-                    'Add voices\n\n'
-                    'Linux → Speech recognition is not supported on Linux.',
+                    () {
+                      const base =
+                          'Languages shown here are provided by your device\'s '
+                          'speech engine — no downloads needed inside this app.\n\n'
+                          'To add a language:\n';
+                      switch (defaultTargetPlatform) {
+                        case TargetPlatform.android:
+                          return '${base}Settings → System → Languages & input → On-device recognition → Add a language';
+                        case TargetPlatform.windows:
+                          return '${base}Settings → Time & language → Speech → Add voices';
+                        case TargetPlatform.linux:
+                          return 'Languages shown here are provided by your device\'s '
+                              'speech engine — no downloads needed inside this app.\n\n'
+                              'Speech recognition on Linux requires a compatible '
+                              'engine (e.g. PocketSphinx) installed on your system.';
+                        default:
+                          return '${base}Check your device\'s speech or language settings.';
+                      }
+                    }(),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context)
                               .colorScheme

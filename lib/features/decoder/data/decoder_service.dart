@@ -131,9 +131,7 @@ class DecoderService {
   /// Share a WAV file via the platform share sheet.
   ///
   /// [path] is the full file path returned by [saveRecording].
-  /// On Android the user can choose Downloads / My Files; on iOS they can
-  /// choose Files or AirDrop — the share sheet is the correct store-safe API
-  /// for saving to a user-visible location.
+  /// On Android the user can choose Downloads / My Files via the share sheet.
   Future<void> shareRecording(String path) async {
     await Share.shareXFiles(
       [XFile(path, mimeType: 'audio/wav')],
@@ -175,7 +173,7 @@ class DecoderService {
       sampleRate: _sampleRate,
       numChannels: 1,
     );
-    final config = (defaultTargetPlatform == TargetPlatform.android && !kIsWeb)
+    final config = (defaultTargetPlatform == TargetPlatform.android)
         ? const RecordConfig(
             encoder: AudioEncoder.pcm16bits,
             sampleRate: _sampleRate,
