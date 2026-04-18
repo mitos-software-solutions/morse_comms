@@ -46,16 +46,12 @@ class _DecoderView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // On Android/iOS the save flow writes to a temp file then opens the share
+    // On Android the save flow writes to a temp file then opens the share
     // sheet so the user can pick Downloads/Files.  On desktop platforms the
     // native save dialog is used directly, so no share sheet is needed here.
-    final autoShare = !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.android ||
-            defaultTargetPlatform == TargetPlatform.iOS);
-    final isDesktop = !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.windows ||
-            defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.linux);
+    final autoShare = defaultTargetPlatform == TargetPlatform.android;
+    final isDesktop = defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux;
     return BlocListener<DecoderBloc, DecoderState>(
       listenWhen: (p, c) => c.savedPath != null && p.savedPath != c.savedPath,
       listener: (context, state) {
@@ -453,10 +449,8 @@ class _AudioToolbar extends StatelessWidget {
   }
 
   Future<void> _onSavePressed(BuildContext context) async {
-    final isDesktop = !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.windows ||
-            defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.linux);
+    final isDesktop = defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux;
 
     if (isDesktop) {
       final now = DateTime.now();
@@ -503,21 +497,9 @@ class _AudioToolbar extends StatelessWidget {
   String _pad(int n) => n.toString().padLeft(2, '0');
 
   String _saveDialogBody() {
-    if (kIsWeb) {
-      return 'The WAV file will be downloaded to your browser\'s default '
-          'downloads folder and can be reloaded here via the folder icon.';
-    }
     switch (defaultTargetPlatform) {
       case TargetPlatform.windows:
-        return 'A save dialog will open.\n\n'
-            'Choose a location such as your Documents or Downloads folder.\n\n'
-            'The WAV file can be reloaded here via the folder icon.';
-      case TargetPlatform.iOS:
-        return 'A share sheet will open.\n\n'
-            '• iOS: tap "Save to Files"\n\n'
-            'The WAV file will then be available in the Files app '
-            'and can be reloaded here via the folder icon.';
-      case TargetPlatform.macOS:
+      case TargetPlatform.linux:
         return 'A save dialog will open.\n\n'
             'Choose a location such as your Documents or Downloads folder.\n\n'
             'The WAV file can be reloaded here via the folder icon.';

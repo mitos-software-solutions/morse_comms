@@ -62,17 +62,11 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false
   image_path: "assets/icon/Morse_Comms_icon.png"
-  web:
-    generate: true
-    image_path: "assets/icon/Morse_Comms_icon.png"
   windows:
     generate: true
     image_path: "assets/icon/Morse_Comms_icon.png"
-  macos:
-    generate: true
-    image_path: "icons.png"
   linux:
     generate: true
     image_path: "assets/icon/Morse_Comms_icon.png"
