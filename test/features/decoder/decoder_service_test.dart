@@ -1,116 +1,76 @@
-import 'dart:typed_data';
-
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:morse_comms/features/decoder/data/decoder_service.dart';
+
+// The `record` package calls `create` on its method channel when AudioRecorder
+// is constructed. Register a no-op handler so tests don't need a real device.
+void _setUpRecordChannelMock() {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('com.llfbandit.record/messages'),
+    (call) async => call.method == 'create' ? 0 : null,
+  );
+}
+
+void _tearDownRecordChannelMock() {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('com.llfbandit.record/messages'),
+    null,
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('DecoderService', () {
-    group('API Contract', () {
-      test('DecoderService class exists', () {
-        expect(DecoderService, isNotNull);
+    late DecoderService svc;
+
+    setUp(() {
+      _setUpRecordChannelMock();
+      svc = DecoderService();
+    });
+
+    tearDown(() async {
+      await svc.dispose();
+      _tearDownRecordChannelMock();
+    });
+
+    group('fresh instance state', () {
+      test('recordedFrameCount is 0 before any recording', () {
+        expect(svc.recordedFrameCount, 0);
       });
 
-      test('DecoderService has required methods', () {
-        // Verify the class has the expected public interface
-        final methods = [
-          'hasPermission',
-          'startListening',
-          'stopListening',
-          'analyzeRecording',
-          'analyzeWavFile',
-          'buildRecordingWav',
-          'saveRecording',
-          'shareRecording',
-          'dispose',
-        ];
-        
-        for (final method in methods) {
-          expect(method, isNotEmpty);
-        }
+      test('buildRecordingWav returns empty Uint8List when nothing recorded', () {
+        expect(svc.buildRecordingWav(), isEmpty);
       });
 
-      test('DecoderService has required getters', () {
-        // Verify the class has the expected getters
-        final getters = [
-          'signalStream',
-          'recordedFrameCount',
-          'onSideTone',
-        ];
-        
-        for (final getter in getters) {
-          expect(getter, isNotEmpty);
-        }
+      test('analyzeRecording resolves to ("", 0.0) with no audio data',
+          () async {
+        final result = await svc.analyzeRecording();
+        expect(result, equals(('', 0.0)));
       });
 
-      test('DecoderService accepts optional onSideTone callback', () {
-        // Verify the constructor signature
-        void callback(bool isTone) {}
-        expect(callback, isNotNull);
+      test('signalStream is a broadcast stream', () {
+        expect(svc.signalStream.isBroadcast, isTrue);
+      });
+
+      test('onSideTone is null when not provided', () {
+        expect(svc.onSideTone, isNull);
       });
     });
 
-    group('Constants', () {
-      test('DecoderService defines sample rate', () {
-        // The service uses 44100 Hz sample rate
-        const sampleRate = 44100;
-        expect(sampleRate, equals(44100));
-      });
-
-      test('DecoderService defines frame size', () {
-        // The service uses 512 frame size
-        const frameSize = 512;
-        expect(frameSize, equals(512));
+    group('onSideTone callback', () {
+      test('onSideTone is set when provided', () async {
+        void cb(bool _) {}
+        final svcWithCb = DecoderService(onSideTone: cb);
+        expect(svcWithCb.onSideTone, isNotNull);
+        await svcWithCb.dispose();
       });
     });
 
-    group('WAV Building', () {
-      test('buildRecordingWav returns Uint8List', () {
-        // Verify the return type is correct
-        expect(Uint8List, isNotNull);
-      });
-
-      test('empty recording produces empty WAV', () {
-        // When no audio is recorded, buildRecordingWav should return empty
-        final emptyWav = Uint8List(0);
-        expect(emptyWav, isEmpty);
-      });
-    });
-
-    group('File Analysis', () {
-      test('analyzeWavFile accepts Uint8List', () {
-        final wavBytes = Uint8List(100);
-        expect(wavBytes, isA<Uint8List>());
-      });
-
-      test('analyzeRecording returns Future<String>', () {
-        // Verify the return type contract
-        expect(Future, isNotNull);
-      });
-    });
-
-    group('Save and Share', () {
-      test('saveRecording requires filename', () {
-        // Filename should not be empty
-        final filename = 'morse_20260311_120000';
-        expect(filename, isNotEmpty);
-      });
-
-      test('shareRecording requires file path', () {
-        // File path should not be empty
-        final path = '/path/to/file.wav';
-        expect(path, isNotEmpty);
-      });
-    });
-
-    group('Signal Stream', () {
-      test('signalStream emits SignalSnapshot objects', () {
-        // Verify the stream type
-        expect(SignalSnapshot, isNotNull);
-      });
-
-      test('SignalSnapshot has required fields', () {
+    group('SignalSnapshot', () {
+      test('holds power, noiseFloor, and isTone correctly', () {
         final snapshot = SignalSnapshot(
           power: 100.0,
           noiseFloor: 10.0,
@@ -119,6 +79,15 @@ void main() {
         expect(snapshot.power, equals(100.0));
         expect(snapshot.noiseFloor, equals(10.0));
         expect(snapshot.isTone, isTrue);
+      });
+
+      test('isTone is false when power is below noise floor', () {
+        final snapshot = SignalSnapshot(
+          power: 5.0,
+          noiseFloor: 10.0,
+          isTone: false,
+        );
+        expect(snapshot.isTone, isFalse);
       });
     });
   });

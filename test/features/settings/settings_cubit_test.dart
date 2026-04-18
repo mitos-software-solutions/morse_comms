@@ -3,11 +3,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:morse_comms/features/settings/bloc/settings_cubit.dart';
 import 'package:morse_comms/features/settings/data/settings_repository.dart';
+import 'package:morse_comms/features/settings/data/stt_locale_loader.dart';
 
-Future<SettingsCubit> makeCubit([Map<String, Object> prefs = const {}]) async {
+class _FakeSttLocaleLoader implements SttLocaleLoader {
+  final List<SttLocale> locales;
+  int callCount = 0;
+
+  _FakeSttLocaleLoader([this.locales = const []]);
+
+  @override
+  Future<List<SttLocale>> load() async {
+    callCount++;
+    return List.of(locales);
+  }
+}
+
+Future<SettingsCubit> makeCubit([
+  Map<String, Object> prefs = const {},
+  SttLocaleLoader? localeLoader,
+]) async {
   SharedPreferences.setMockInitialValues(prefs);
   final sp = await SharedPreferences.getInstance();
-  return SettingsCubit(SettingsRepository(sp));
+  return SettingsCubit(
+    SettingsRepository(sp),
+    localeLoader: localeLoader ?? _FakeSttLocaleLoader(),
+  );
 }
 
 void main() {
@@ -44,7 +64,6 @@ void main() {
     test('persists themeMode so a new cubit sees it', () async {
       final cubit = await makeCubit();
       await cubit.setThemeMode(ThemeMode.dark);
-      // Simulate restart by reading prefs again.
       final sp = await SharedPreferences.getInstance();
       final repo = SettingsRepository(sp);
       expect(repo.themeMode, ThemeMode.dark);
@@ -114,8 +133,6 @@ void main() {
     });
   });
 
-  // ── setSttLocaleId ────────────────────────────────────────────────────────
-
   group('SettingsCubit — initial sttLocaleId', () {
     test('defaults to en_US when not persisted', () async {
       final cubit = await makeCubit();
@@ -157,31 +174,40 @@ void main() {
     });
   });
 
-  // ── loadSttLocales ────────────────────────────────────────────────────────
-
   group('SettingsCubit — loadSttLocales()', () {
-    test('is idempotent — second call is a no-op', () async {
-      // In a test environment the STT platform channel is not registered, so
-      // initialize() returns false / throws. The important thing is that the
-      // internal _sttLocalesLoaded flag prevents a second call from re-running
-      // the initialisation logic.
-      //
-      // We verify idempotency by calling twice; neither call should throw, and
-      // the final state should have no locales (because the platform returned
-      // unavailable).
-      final cubit = await makeCubit();
-      // Both calls must complete without exception.
-      try {
-        await cubit.loadSttLocales();
-      } catch (_) {
-        // Platform not available in test environment — acceptable.
-      }
-      try {
-        await cubit.loadSttLocales();
-      } catch (_) {}
-      // Even if the second call somehow slipped through, no extra state change
-      // should have happened beyond what the first call produced.
-      expect(cubit.state.sttLocales, isA<List>());
+    test('emits locales returned by the loader', () async {
+      const locales = [
+        SttLocale(id: 'en_US', name: 'English (United States)'),
+        SttLocale(id: 'el_GR', name: 'Greek (Greece)'),
+      ];
+      final cubit = await makeCubit({}, _FakeSttLocaleLoader(locales));
+      await cubit.loadSttLocales();
+      expect(cubit.state.sttLocales, hasLength(2));
+      expect(cubit.state.sttLocales[0].id, 'en_US');
+      expect(cubit.state.sttLocales[1].id, 'el_GR');
+    });
+
+    test('emits nothing when loader returns empty', () async {
+      final cubit = await makeCubit({}, _FakeSttLocaleLoader());
+      await cubit.loadSttLocales();
+      expect(cubit.state.sttLocales, isEmpty);
+    });
+
+    test('is idempotent — loader called only once on repeated calls', () async {
+      final loader = _FakeSttLocaleLoader(
+        [const SttLocale(id: 'en_US', name: 'English')],
+      );
+      final cubit = await makeCubit({}, loader);
+      await cubit.loadSttLocales();
+      await cubit.loadSttLocales();
+      expect(loader.callCount, 1);
+    });
+
+    test('does not change other settings fields when loading locales', () async {
+      const locales = [SttLocale(id: 'en_US', name: 'English')];
+      final cubit = await makeCubit({'wpm': 25}, _FakeSttLocaleLoader(locales));
+      await cubit.loadSttLocales();
+      expect(cubit.state.wpm, 25);
     });
   });
 }
