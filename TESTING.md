@@ -210,7 +210,7 @@ The app ships as a Linux `.tar.gz`, a Windows installer, and an Android `.apk`. 
 
 ### Test file
 
-All five flows live in **`integration_test/app_test.dart`**. Each flow is a separate `group` with one or more `testWidgets` calls. `IntegrationTestWidgetsFlutterBinding.ensureInitialized()` is called at the top; `app.main()` bootstraps the real app inside each test.
+All five flows live in **`integration_test/app_test.dart`** as sequential sections inside a single `testWidgets` call. `app.main()` is called once at the top — calling it more than once per process would re-register GetIt services and throw. The widget tree is cleared between `testWidgets` calls in `LiveTestWidgetsFlutterBinding`, so multiple top-level tests would each need their own `app.main()`, which is not possible. Each flow section navigates to its own starting tab before asserting.
 
 ---
 

@@ -3,27 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:morse_comms/main.dart' as app;
 
-// In integration tests the real app persists between testWidgets calls.
-// app.main() must only be called once — calling it again re-registers GetIt
-// services and calls runApp() inside an already-running test, both of which
-// throw. The flag below ensures exactly one launch per test process.
-bool _appLaunched = false;
-
-Future<void> _launchOnce(WidgetTester tester) async {
-  if (!_appLaunched) {
-    _appLaunched = true;
-    app.main();
-  }
-  await tester.pumpAndSettle();
-}
-
+// Integration tests share a single running app instance — the widget tree
+// persists across logical sections. All flows live in one testWidgets call
+// to avoid the GetIt double-registration error that occurs when app.main()
+// is called more than once per process.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('navigation — all four tabs are reachable', (tester) async {
-    await _launchOnce(tester);
+  testWidgets('app integration flows', (tester) async {
+    app.main();
+    await tester.pumpAndSettle();
 
-    // Initial route is Encoder.
+    // ── 1. Navigation — all four tabs are reachable ───────────────────────
     expect(find.text('Morse Encoder'), findsOneWidget);
 
     await tester.tap(find.text('Decoder'));
@@ -36,24 +27,20 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Settings'), findsOneWidget);
-  });
+    // 'APPEARANCE' is a section header unique to the Settings screen.
+    // Asserting on it avoids the ambiguity where both the AppBar title and
+    // the nav bar label are the string "Settings".
+    expect(find.text('APPEARANCE'), findsOneWidget);
 
-  testWidgets('encoder — typing text produces Morse output', (tester) async {
-    await _launchOnce(tester);
-
+    // ── 2. Encoder — typing text produces Morse output ────────────────────
     await tester.tap(find.text('Encoder'));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).first, 'SOS');
     await tester.pumpAndSettle();
-
     expect(find.textContaining('···'), findsOneWidget);
-  });
 
-  testWidgets('decoder — Load Example SOS decodes correctly', (tester) async {
-    await _launchOnce(tester);
-
+    // ── 3. Decoder — Load Example SOS decodes correctly ───────────────────
     await tester.tap(find.text('Decoder'));
     await tester.pumpAndSettle();
 
@@ -65,35 +52,25 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 30));
 
     expect(find.textContaining('SOS'), findsOneWidget);
-  });
 
-  testWidgets('settings — WPM change persists across navigation', (tester) async {
-    await _launchOnce(tester);
-
+    // ── 4. Settings — WPM change persists across navigation ───────────────
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-
     expect(find.text('20 WPM'), findsOneWidget);
 
     await tester.drag(find.byType(Slider).first, const Offset(60, 0));
     await tester.pumpAndSettle();
-
     expect(find.text('20 WPM'), findsNothing);
 
     await tester.tap(find.text('Encoder'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-
     expect(find.text('20 WPM'), findsNothing);
-  });
 
-  testWidgets('lessons — Koch and Farnsworth cards are visible', (tester) async {
-    await _launchOnce(tester);
-
+    // ── 5. Lessons — Koch and Farnsworth cards are visible ────────────────
     await tester.tap(find.text('Learn'));
     await tester.pumpAndSettle();
-
     expect(find.textContaining('Koch'), findsOneWidget);
     expect(find.textContaining('Farnsworth'), findsOneWidget);
   });
