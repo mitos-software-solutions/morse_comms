@@ -187,10 +187,6 @@ They live under `test/features/**` and run with the regular `flutter test` comma
 
 Integration tests drive the full running app (real platform channels, real widget tree, real routing) using the `integration_test` package and the same `find` / `tester` API as widget tests.
 
-**Phase 1 (Linux desktop) — implemented.**
-**Phase 2 (Windows desktop) — implemented.**
-**Phase 3 (Android emulator) — implemented.**
-
 ---
 
 ### CI target strategy
@@ -267,7 +263,7 @@ All five flows live in **`integration_test/app_test.dart`** as sequential sectio
 
 ## Level: Golden Tests (Visual Regression)
 
-**In progress — first test implemented (`RecordingQualityBadge`).**
+All planned golden tests are implemented and baselines generated for Windows. Linux baselines should be generated via WSL before merging.
 
 Golden tests record and compare pixel-exact image snapshots using `golden_toolkit ^0.15.0`.
 
@@ -322,10 +318,10 @@ automates this for CI platforms.
 | Widget / Screen | States covered | Status |
 |-----------------|---------------|--------|
 | `RecordingQualityBadge` | LOW + MED × light + dark | Done |
-| `EncoderScreen` | idle, SOS typed | Planned |
-| `DecoderScreen` | idle, result | Planned |
-| `SettingsScreen` | top section | Planned |
-| `LessonsScreen` | default progress | Planned |
+| `EncoderScreen` | idle, SOS typed | Done |
+| `DecoderScreen` | idle, result | Done |
+| `SettingsScreen` | top section | Done |
+| `LessonsScreen` | default progress | Done |
 
 ---
 
