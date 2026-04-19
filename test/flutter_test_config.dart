@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' show Platform;
 
 import 'package:golden_toolkit/golden_toolkit.dart';
 
@@ -13,7 +13,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     () async => testMain(),
     config: GoldenToolkitConfiguration(
       fileNameFactory: (name) =>
-          'test/goldens/${Platform.operatingSystem}/$name.png',
+          'goldens/${Platform.operatingSystem}/$name.png',
     ),
   );
 }
