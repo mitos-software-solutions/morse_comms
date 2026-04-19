@@ -24,7 +24,7 @@ jobs:
         run: flutter analyze --fatal-infos
 
       - name: Run tests with coverage
-        run: flutter test --coverage
+        run: flutter test --coverage --exclude-tags golden
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -33,6 +33,44 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  golden-linux:
+    runs-on: ubuntu-latest
+    needs: unit
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.7'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run golden tests (Linux)
+        run: flutter test --tags golden
+
+  golden-windows:
+    runs-on: windows-latest
+    needs: unit
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.7'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run golden tests (Windows)
+        run: flutter test --tags golden
 
   integration-linux:
     runs-on: ubuntu-latest

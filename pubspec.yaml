@@ -59,6 +59,9 @@ dev_dependencies:
   injectable_generator: ^2.7.0
   build_runner: ^2.4.0
 
+  # Golden (visual regression) tests
+  golden_toolkit: ^0.15.0
+
   # App icon generation
   flutter_launcher_icons: ^0.14.0
 
