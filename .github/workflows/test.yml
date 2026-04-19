@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - uses: subosito/flutter-action@v2
         with:
@@ -27,7 +27,7 @@ jobs:
         run: flutter test --coverage
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage/lcov.info
           fail_ci_if_error: false
@@ -39,7 +39,7 @@ jobs:
     needs: unit
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - uses: subosito/flutter-action@v2
         with:
@@ -54,6 +54,7 @@ jobs:
             libgtk-3-dev \
             libblkid-dev \
             liblzma-dev \
+            libasound2-dev \
             ninja-build \
             cmake \
             pkg-config \
