@@ -201,7 +201,7 @@ The app ships as a Linux `.tar.gz`, a Windows installer, and an Android `.apk`. 
 |-------|--------|-------------|--------|-------|
 | 1 | `ubuntu-latest` | `-d linux` | **Done** | GTK deps + `xvfb-run` virtual display; same binary as the tar.gz release |
 | 2 | `windows-latest` | `-d windows` | **Done** | Display available by default; same test file, catches Windows-specific paths |
-| 3 | `ubuntu-latest` + KVM | `-d emulator` | **Done** | `reactivecircus/android-emulator-runner@v2`, API 34 `google_apis` x86_64; also pre-wires emulator infrastructure for future golden tests |
+| 3 | `ubuntu-latest` + KVM | auto-detected | **Done** | `reactivecircus/android-emulator-runner@v2`, API 34 `google_apis` x86_64; Flutter detects the running emulator automatically; also pre-wires emulator infrastructure for future golden tests |
 | — | Physical device | `-d <real android>` | Out of CI | Mic, real STT, real audio require a real device |
 
 **CI workflow:** `.github/workflows/test.yml` has two jobs — `unit` (runs `flutter test --coverage`) and `integration-linux` (depends on `unit`, installs GTK deps + Xvfb, runs `xvfb-run --auto-servernum flutter test integration_test/app_test.dart -d linux`). Flutter version pinned to `3.41.7`.
