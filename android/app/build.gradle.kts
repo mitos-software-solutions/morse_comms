@@ -34,7 +34,14 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // flutter_soloud ships prebuilt libs for all ABIs via its AAR; keep only arm64.
+            excludes += setOf("**/armeabi-v7a/**", "**/x86_64/**", "**/x86/**")
         }
     }
 
