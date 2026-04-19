@@ -38,7 +38,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, 'SOS');
     await tester.pumpAndSettle();
-    expect(find.textContaining('···'), findsOneWidget);
+    expect(find.textContaining('...'), findsOneWidget);
 
     // ── 3. Decoder — Load Example SOS decodes correctly ───────────────────
     await tester.tap(find.text('Decoder'));
