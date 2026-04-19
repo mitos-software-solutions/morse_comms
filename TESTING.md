@@ -185,80 +185,70 @@ They live under `test/features/**` and run with the regular `flutter test` comma
 
 ## Level: Integration Tests (`integration_test`)
 
-**Planned — not yet implemented.**
-
 Integration tests drive the full running app (real platform channels, real widget tree, real routing) using the `integration_test` package and the same `find` / `tester` API as widget tests.
+
+**Phase 1 (Linux desktop) — implemented.**
+**Phase 2 (Windows desktop) — implemented.**
+**Phase 3 (Android emulator) — implemented.**
 
 ---
 
 ### CI target strategy
 
-| Runner | Target | Cost | What it can test |
-|--------|--------|------|-----------------|
-| `ubuntu-latest` (existing) | Flutter web / Chrome | Free, fast | Navigation, encoder, decoder file-load, settings, lessons |
-| `windows-latest` (new job) | Windows desktop | ~2× slower | Same flows + Windows-specific save dialog |
-| Physical device / emulator | Android | Not in CI | Mic recording, real STT, real audio |
+The app ships as a Linux `.tar.gz`, a Windows installer, and an Android `.apk`. Integration tests target the actual build artifacts, not a web build.
 
-**Phase 1** targets the existing `ubuntu-latest` runner using `-d chrome`. No new runner cost, runs alongside unit tests. Flows that require a microphone, real audio output, or a native file picker are explicitly out of scope for CI and deferred to device-level testing.
+| Phase | Runner | Target flag | Status | Notes |
+|-------|--------|-------------|--------|-------|
+| 1 | `ubuntu-latest` | `-d linux` | **Done** | GTK deps + `xvfb-run` virtual display; same binary as the tar.gz release |
+| 2 | `windows-latest` | `-d windows` | **Done** | Display available by default; same test file, catches Windows-specific paths |
+| 3 | `ubuntu-latest` + KVM | auto-detected | **Done** | `reactivecircus/android-emulator-runner@v2`, API 34 `google_apis` x86_64; Flutter detects the running emulator automatically; also pre-wires emulator infrastructure for future golden tests |
+| — | Physical device | `-d <real android>` | Out of CI | Mic, real STT, real audio require a real device |
 
----
+**CI workflow:** `.github/workflows/test.yml` has four jobs — `unit` (analyse + `flutter test --coverage` + Codecov upload), `integration-linux`, `integration-windows`, and `integration-android` (all depend on `unit`). Flutter version pinned to `3.41.7`.
 
-### Setup required
-
-1. **`pubspec.yaml`** — add to `dev_dependencies`:
-   ```yaml
-   integration_test:
-     sdk: flutter
-   ```
-
-2. **Directory** — create `integration_test/` at the repo root (sibling of `test/`).
-
-3. **`integration_test/app_test.dart`** — entry point that calls `IntegrationTestWidgetsFlutterBinding.ensureInitialized()` and bootstraps the real app (`main()`-style setup: SharedPreferences, PlayerService stub or real, SettingsCubit with `SttLocaleLoaderImpl`).
-
-4. **`.github/workflows/test.yml`** — add a second job (or extend the existing one) that runs:
-   ```
-   flutter test integration_test/ -d chrome --browser-name chrome
-   ```
-   Keep unit tests on `ubuntu-latest`; integration tests can share the same job or run separately.
+**`flutter_soloud` in CI:** `PlayerService.init()` is wrapped in `try/catch` in `lib/main.dart` and continues silently if no audio device is present — audio playback is not asserted in any CI test flow.
 
 ---
 
-### Flows to implement (ordered by value / feasibility)
+### Test file
 
-#### 1. App navigation — `integration_test/navigation_test.dart`
+All five flows live in **`integration_test/app_test.dart`** as sequential sections inside a single `testWidgets` call. `app.main()` is called once at the top — calling it more than once per process would re-register GetIt services and throw. The widget tree is cleared between `testWidgets` calls in `LiveTestWidgetsFlutterBinding`, so multiple top-level tests would each need their own `app.main()`, which is not possible. Each flow section navigates to its own starting tab before asserting.
+
+---
+
+### Flows (ordered by value / feasibility)
+
+#### 1. App navigation
 - App starts on Encoder tab (`Morse Encoder` title visible).
-- Tap each bottom nav item in order (Decoder → Learn → Settings → Encoder) and verify the primary screen title for each.
+- Tap each bottom nav item in order (Decoder → Learn → Settings) and verify each screen's primary title.
 - **CI safe:** yes. No audio, no permissions.
 
-#### 2. Encoder flow — `integration_test/encoder_flow_test.dart`
+#### 2. Encoder flow
 - Type `SOS` into the text field.
-- Verify Morse output `... --- ...` is displayed.
-- Verify Play button is enabled.
-- Verify the output card disappears after clearing the field.
-- **CI safe:** yes. Does not tap Play (audio playback has no output device in CI).
+- Verify Morse output containing `...` is displayed.
+- **CI safe:** yes. Does not tap Play (no output device in CI).
 
-#### 3. Decoder: Load Example flow — `integration_test/decoder_flow_test.dart`
+#### 3. Decoder: Load Example flow
 - Navigate to Decoder tab.
-- Tap the "Load Example" popup button (flask icon).
+- Tap the "Load Example" popup button (flask/science icon).
 - Select "SOS (20 WPM)" from the menu.
-- Verify the Analyzing spinner appears then resolves.
-- Verify decoded text `SOS` is shown on screen.
-- Verify the Play and Save buttons appear (audio bytes are available).
+- Verify decoded text containing `SOS` is shown (up to 30 s for DSP on slow CI).
 - **CI safe:** yes. Uses `rootBundle` — no file picker, no microphone.
-- **Note:** this test exercises the full DSP pipeline end-to-end on a real device target.
+- **Note:** exercises the full DSP pipeline end-to-end on a real device target.
 
-#### 4. Settings: WPM persistence — `integration_test/settings_flow_test.dart`
-- Navigate to Settings.
-- Drag the WPM slider to a new value (e.g. 30 WPM).
-- Navigate to Encoder and back to Settings.
-- Verify the WPM label still shows the updated value (SharedPreferences round-trip).
+#### 4. Settings: WPM persistence
+- Navigate to Settings; confirm default `20 WPM` label.
+- Drag the WPM slider; confirm label is no longer `20 WPM`.
+- Navigate away to Encoder and back to Settings.
+- Confirm updated WPM label persists (SharedPreferences round-trip).
 - **CI safe:** yes.
 
-#### 5. Lessons: Browse and enter a drill — `integration_test/lessons_flow_test.dart`
+#### 5. Lessons: Browse and drill navigation
 - Navigate to Learn tab.
 - Verify Koch Method and Farnsworth Method cards are visible.
-- Tap Koch Method → verify the Koch lesson list screen opens.
-- Tap the reference icon → verify Reference screen opens with Characters tab.
+- Tap Koch → verify `'Koch Method'` screen opens; go back.
+- Tap Farnsworth → verify `'Farnsworth Method'` screen opens; go back.
+- Verify `'Learn Morse'` is shown again after returning.
 - **CI safe:** yes. Does not start audio drills.
 
 ---
@@ -272,14 +262,6 @@ Integration tests drive the full running app (real platform channels, real widge
 | Real STT locales | Platform-specific STT engine | Manual on Android/Windows |
 | Native file picker | Requires OS file dialog | Manual / Windows device |
 | Save-to-path (desktop) | Requires writable fs dialog | Manual on Windows |
-
----
-
-### Known integration test constraints
-
-- **`compute` isolates on web:** Flutter web does not support true Dart isolates; `compute()` falls back to running inline. The DSP pipeline will still complete correctly but will block the UI thread briefly during analysis. This is acceptable for tests but is a known difference from native.
-- **`flutter_soloud` on web:** `PlayerService.init()` may throw or no-op if no audio context is available in a headless Chrome runner. The integration test bootstrap should catch and swallow this error so tests can continue without audio.
-- **SharedPreferences on web:** uses `localStorage`; state is isolated per test run by default.
 
 ---
 
@@ -307,8 +289,7 @@ Golden tests record and compare **image snapshots** of widgets or screens:
   - Keep strengthening **core** and **feature logic** tests in `test/core/**` and `test/features/**` when adding new behavior.
 
 - **Medium term**
-  - Implement the five **integration test** flows above (navigation, encoder, decoder file-load, settings persistence, lessons browse).
-  - Add a `windows-latest` CI job for Windows-specific paths (save dialog, Windows STT).
+  - Monitor Windows CI results for platform-specific failures (save dialog, Windows STT).
 
 - **Long term**
   - Add **golden tests** for visual stability if UI changes become frequent.
