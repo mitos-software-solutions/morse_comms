@@ -140,8 +140,8 @@ void main() {
     await tester.tap(find.byIcon(Icons.info_outline));
     await tester.pumpAndSettle();
 
-    // Expect some content from lessons_info dialog to appear.
-    expect(find.textContaining('Koch'), findsOneWidget);
+    // Expect content unique to the lessons info dialog body.
+    expect(find.textContaining('36 levels'), findsOneWidget);
   });
 }
 

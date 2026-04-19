@@ -1,0 +1,39 @@
+name: Update Golden Baselines
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to regenerate goldens for'
+        required: true
+        type: choice
+        options:
+          - linux
+          - windows
+
+jobs:
+  update-goldens:
+    runs-on: ${{ inputs.platform == 'windows' && 'windows-latest' || 'ubuntu-latest' }}
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.7'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Regenerate golden baselines
+        run: flutter test --tags golden --update-goldens
+
+      - name: Commit updated goldens
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore: update ${{ inputs.platform }} golden baselines'
+          file_pattern: 'test/goldens/${{ inputs.platform }}/**'

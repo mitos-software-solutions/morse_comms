@@ -187,10 +187,6 @@ They live under `test/features/**` and run with the regular `flutter test` comma
 
 Integration tests drive the full running app (real platform channels, real widget tree, real routing) using the `integration_test` package and the same `find` / `tester` API as widget tests.
 
-**Phase 1 (Linux desktop) — implemented.**
-**Phase 2 (Windows desktop) — implemented.**
-**Phase 3 (Android emulator) — implemented.**
-
 ---
 
 ### CI target strategy
@@ -265,21 +261,67 @@ All five flows live in **`integration_test/app_test.dart`** as sequential sectio
 
 ---
 
-## Planned Level: Golden Tests (Visual Regression)
+## Level: Golden Tests (Visual Regression)
 
-**Not implemented yet — future work.**
+All planned golden tests are implemented and baselines generated for Windows. Linux baselines should be generated via WSL before merging.
 
-Golden tests record and compare **image snapshots** of widgets or screens:
+Golden tests record and compare pixel-exact image snapshots using `golden_toolkit ^0.15.0`.
 
-- **Scope**
-  - Key screens at multiple sizes/themes:
-    - Encoder/Decoder/Lessons/Settings screens.
-    - Important dialogs or error states.
-  - Compare new renders against checked-in “golden” images.
+---
 
-- **Benefits**
-  - Catch unintended visual/layout changes early.
-  - Helpful as the UI grows or as themes are refined.
+### Setup
+
+- **Package:** `golden_toolkit` in `dev_dependencies`
+- **Global config:** `test/flutter_test_config.dart` — discovered automatically by the test runner. Calls `loadAppFonts()` and configures `golden_toolkit` with a platform-aware file name factory. No per-test setup needed.
+- **File location:** co-located with the test file, under `goldens/<platform>/`:
+  ```
+  test/features/decoder/goldens/linux/recording_quality_badge_low_light.png
+  test/features/decoder/goldens/windows/recording_quality_badge_low_light.png
+  ```
+- **Tagging:** all golden tests use the `golden` tag (`testGoldens(...)` applies it automatically). The `unit` CI job excludes them with `--exclude-tags golden`; dedicated `golden-linux` and `golden-windows` jobs run them with `--tags golden`.
+
+---
+
+### Regenerating baselines
+
+Run on each platform whenever a golden test is intentionally changed:
+
+```bash
+flutter test --tags golden --update-goldens
+```
+
+**Windows** (PowerShell):
+```powershell
+flutter test --tags golden --update-goldens
+```
+
+**Linux** (WSL):
+```bash
+# Use the native Linux Flutter in WSL — not the Windows one at /mnt/d/repos/flutter
+export PATH=”$HOME/flutter/bin:$PATH”
+cd /mnt/d/repos/morse_comms
+flutter pub get   # regenerates package_config.json with Linux paths
+flutter test --tags golden --update-goldens
+```
+
+> **Important:** running `flutter pub get` in WSL rewrites `.dart_tool/package_config.json`
+> with Linux paths. After finishing WSL work, run `flutter pub get` in PowerShell to restore
+> Windows paths before continuing Windows development or running tests on Windows.
+
+The `update_goldens.yml` workflow dispatch (available from the Actions tab once merged to main)
+automates this for CI platforms.
+
+---
+
+### Scope
+
+| Widget / Screen | States covered | Status |
+|-----------------|---------------|--------|
+| `RecordingQualityBadge` | LOW + MED × light + dark | Done |
+| `EncoderScreen` | idle, SOS typed | Done |
+| `DecoderScreen` | idle, result | Done |
+| `SettingsScreen` | top section | Done |
+| `LessonsScreen` | default progress | Done |
 
 ---
 
@@ -287,10 +329,11 @@ Golden tests record and compare **image snapshots** of widgets or screens:
 
 - **Short term**
   - Keep strengthening **core** and **feature logic** tests in `test/core/**` and `test/features/**` when adding new behavior.
+  - Expand golden tests to remaining screens in the scope table above.
 
 - **Medium term**
   - Monitor Windows CI results for platform-specific failures (save dialog, Windows STT).
 
 - **Long term**
-  - Add **golden tests** for visual stability if UI changes become frequent.
+  - Add golden tests for dialogs and error states once the UI is stable.
 

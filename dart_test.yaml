@@ -1,0 +1,3 @@
+tags:
+  golden:
+    description: "Visual regression (golden) tests — run with --update-goldens to regenerate baselines"
