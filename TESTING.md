@@ -188,7 +188,7 @@ They live under `test/features/**` and run with the regular `flutter test` comma
 Integration tests drive the full running app (real platform channels, real widget tree, real routing) using the `integration_test` package and the same `find` / `tester` API as widget tests.
 
 **Phase 1 (Linux desktop) — implemented.**
-**Phase 2 (Windows desktop) — pending.**
+**Phase 2 (Windows desktop) — implemented.**
 
 ---
 
@@ -199,7 +199,7 @@ The app ships as a Linux `.tar.gz`, a Windows installer, and an Android `.apk`. 
 | Phase | Runner | Target flag | Status | Notes |
 |-------|--------|-------------|--------|-------|
 | 1 | `ubuntu-latest` | `-d linux` | **Done** | GTK deps + `xvfb-run` virtual display; same binary as the tar.gz release |
-| 2 | `windows-latest` | `-d windows` | Pending | Display available by default; same test file, catches Windows-specific paths |
+| 2 | `windows-latest` | `-d windows` | **Done** | Display available by default; same test file, catches Windows-specific paths |
 | — | Physical device / emulator | `-d <android>` | Out of CI | Mic, real STT, real audio require a real device |
 
 **CI workflow:** `.github/workflows/test.yml` has two jobs — `unit` (runs `flutter test --coverage`) and `integration-linux` (depends on `unit`, installs GTK deps + Xvfb, runs `xvfb-run --auto-servernum flutter test integration_test/app_test.dart -d linux`). Flutter version pinned to `3.41.7`.
@@ -284,7 +284,7 @@ Golden tests record and compare **image snapshots** of widgets or screens:
   - Keep strengthening **core** and **feature logic** tests in `test/core/**` and `test/features/**` when adding new behavior.
 
 - **Medium term**
-  - Add the **Phase 2 `windows-latest` CI job** (`-d windows`) to catch Windows-specific paths (save dialog, Windows STT).
+  - Monitor Windows CI results for platform-specific failures (save dialog, Windows STT).
 
 - **Long term**
   - Add **golden tests** for visual stability if UI changes become frequent.

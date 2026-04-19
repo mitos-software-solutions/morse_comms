@@ -65,3 +65,22 @@ jobs:
 
       - name: Run integration tests (Linux desktop)
         run: xvfb-run --auto-servernum flutter test integration_test/app_test.dart -d linux
+
+  integration-windows:
+    runs-on: windows-latest
+    needs: unit
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.7'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run integration tests (Windows desktop)
+        run: flutter test integration_test/app_test.dart -d windows
