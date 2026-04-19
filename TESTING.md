@@ -241,9 +241,12 @@ All five flows live in **`integration_test/app_test.dart`** as sequential sectio
 - Confirm updated WPM label persists (SharedPreferences round-trip).
 - **CI safe:** yes.
 
-#### 5. Lessons: Browse
+#### 5. Lessons: Browse and drill navigation
 - Navigate to Learn tab.
 - Verify Koch Method and Farnsworth Method cards are visible.
+- Tap Koch → verify `'Koch Method'` screen opens; go back.
+- Tap Farnsworth → verify `'Farnsworth Method'` screen opens; go back.
+- Verify `'Learn Morse'` is shown again after returning.
 - **CI safe:** yes. Does not start audio drills.
 
 ---

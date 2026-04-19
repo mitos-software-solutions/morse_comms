@@ -68,10 +68,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('20 WPM'), findsNothing);
 
-    // ── 5. Lessons — Koch and Farnsworth cards are visible ────────────────
+    // ── 5. Lessons — browse Koch and Farnsworth drill screens ────────────
     await tester.tap(find.text('Learn'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Koch'), findsOneWidget);
     expect(find.textContaining('Farnsworth'), findsOneWidget);
+
+    // Tap into Koch drill list and verify the screen opens.
+    await tester.tap(find.textContaining('Koch'));
+    await tester.pumpAndSettle();
+    expect(find.text('Koch Method'), findsOneWidget);
+
+    // Go back to Learn.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Tap into Farnsworth drill list and verify the screen opens.
+    await tester.tap(find.textContaining('Farnsworth'));
+    await tester.pumpAndSettle();
+    expect(find.text('Farnsworth Method'), findsOneWidget);
+
+    // Go back to Learn.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Learn Morse'), findsOneWidget);
   });
 }
