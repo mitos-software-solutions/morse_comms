@@ -204,7 +204,7 @@ The app ships as a Linux `.tar.gz`, a Windows installer, and an Android `.apk`. 
 | 3 | `ubuntu-latest` + KVM | auto-detected | **Done** | `reactivecircus/android-emulator-runner@v2`, API 34 `google_apis` x86_64; Flutter detects the running emulator automatically; also pre-wires emulator infrastructure for future golden tests |
 | — | Physical device | `-d <real android>` | Out of CI | Mic, real STT, real audio require a real device |
 
-**CI workflow:** `.github/workflows/test.yml` has two jobs — `unit` (runs `flutter test --coverage`) and `integration-linux` (depends on `unit`, installs GTK deps + Xvfb, runs `xvfb-run --auto-servernum flutter test integration_test/app_test.dart -d linux`). Flutter version pinned to `3.41.7`.
+**CI workflow:** `.github/workflows/test.yml` has four jobs — `unit` (analyse + `flutter test --coverage` + Codecov upload), `integration-linux`, `integration-windows`, and `integration-android` (all depend on `unit`). Flutter version pinned to `3.41.7`.
 
 **`flutter_soloud` in CI:** `PlayerService.init()` is wrapped in `try/catch` in `lib/main.dart` and continues silently if no audio device is present — audio playback is not asserted in any CI test flow.
 
@@ -225,7 +225,7 @@ All five flows live in **`integration_test/app_test.dart`** as sequential sectio
 
 #### 2. Encoder flow
 - Type `SOS` into the text field.
-- Verify Morse output containing `···` is displayed.
+- Verify Morse output containing `...` is displayed.
 - **CI safe:** yes. Does not tap Play (no output device in CI).
 
 #### 3. Decoder: Load Example flow
