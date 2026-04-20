@@ -38,13 +38,6 @@ android {
         }
     }
 
-    packaging {
-        jniLibs {
-            // flutter_soloud ships prebuilt libs for all ABIs via its AAR; keep only arm64.
-            excludes += setOf("**/armeabi-v7a/**", "**/x86_64/**", "**/x86/**")
-        }
-    }
-
     if (keystorePropertiesFile.exists()) {
         signingConfigs {
             create("release") {
@@ -67,6 +60,13 @@ android {
             )
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
+            }
+            packaging {
+                jniLibs {
+                    // Strip non-arm64 libs from release APK (production targets arm64 only).
+                    // Debug APK retains x86_64 so the CI emulator (arch: x86_64) can run.
+                    excludes += setOf("**/armeabi-v7a/**", "**/x86_64/**", "**/x86/**")
+                }
             }
         }
     }

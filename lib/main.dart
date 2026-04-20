@@ -8,7 +8,7 @@ import 'features/player/player_service.dart';
 import 'features/settings/bloc/settings_cubit.dart';
 import 'features/settings/data/settings_repository.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await configureDependencies();
 
