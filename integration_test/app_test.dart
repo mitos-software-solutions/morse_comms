@@ -11,7 +11,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('app integration flows', (tester) async {
-    await app.main();
+    app.main();
     await tester.pumpAndSettle();
 
     // ── 1. Navigation — all four tabs are reachable ───────────────────────
