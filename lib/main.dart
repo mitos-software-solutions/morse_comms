@@ -16,7 +16,7 @@ Future<void> main() async {
   try {
     await player.init();
   } catch (_) {
-    // Audio unavailable (e.g. headless CI runner) — app runs without sound.
+    // Audio unavailable (e.g. headless CI emulator) — app runs without sound.
   }
 
   final prefs = await SharedPreferences.getInstance();

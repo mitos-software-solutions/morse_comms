@@ -61,6 +61,15 @@ android {
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            packaging {
+                jniLibs {
+                    // Flutter only compiles libapp.so/libflutter.so for arm64-v8a.
+                    // Prebuilt libs from AARs (flutter_soloud, FLAC, etc.) land for all ABIs
+                    // bypassing abiFilters — strip them here so the release APK has a
+                    // consistent arm64-v8a-only lib set (fixes F-Droid major ABI mismatch).
+                    excludes += setOf("**/armeabi-v7a/**", "**/x86_64/**", "**/x86/**")
+                }
+            }
         }
     }
 }
