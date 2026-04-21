@@ -157,4 +157,5 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          ram-size: 1024M
           script: flutter test integration_test/app_test.dart
