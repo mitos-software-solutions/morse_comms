@@ -14,9 +14,9 @@ Future<void> main() async {
 
   final player = PlayerService();
   try {
-    await player.init();
+    await player.init().timeout(const Duration(seconds: 10));
   } catch (_) {
-    // Audio unavailable (e.g. headless CI runner) — app runs without sound.
+    // Audio unavailable or timed out (e.g. headless CI emulator) — app runs without sound.
   }
 
   final prefs = await SharedPreferences.getInstance();
