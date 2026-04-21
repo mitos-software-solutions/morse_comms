@@ -34,7 +34,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
 
@@ -63,8 +63,10 @@ android {
             }
             packaging {
                 jniLibs {
-                    // Strip non-arm64 libs from release APK (production targets arm64 only).
-                    // Debug APK retains x86_64 so the CI emulator (arch: x86_64) can run.
+                    // Flutter only compiles libapp.so/libflutter.so for arm64-v8a.
+                    // Prebuilt libs from AARs (flutter_soloud, FLAC, etc.) land for all ABIs
+                    // bypassing abiFilters — strip them here so the release APK has a
+                    // consistent arm64-v8a-only lib set (fixes F-Droid major ABI mismatch).
                     excludes += setOf("**/armeabi-v7a/**", "**/x86_64/**", "**/x86/**")
                 }
             }
