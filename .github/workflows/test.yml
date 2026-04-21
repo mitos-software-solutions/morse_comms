@@ -144,10 +144,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Pre-build Android APKs
-        run: |
-          cd android && ./gradlew app:assembleDebug app:assembleDebugAndroidTest
-
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -161,5 +157,5 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -no-metrics
           script: flutter test integration_test/app_test.dart
