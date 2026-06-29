@@ -1,9 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/morse/morse_encoder.dart';
 import '../../../core/morse/morse_timing.dart';
+import '../../../core/morse/morse_wav_synthesizer.dart';
 import '../../../core/morse/transliterator.dart';
 import '../../player/player_service.dart';
+import '../data/encoder_service.dart';
 import '../data/speech_service.dart';
 
 part 'encoder_event.dart';
@@ -12,17 +16,20 @@ part 'encoder_state.dart';
 class EncoderBloc extends Bloc<EncoderEvent, EncoderState> {
   final PlayerService _player;
   final SpeechService _speech;
+  final EncoderService _service;
   late MorseEncoder _encoder;
   late int _frequencyHz;
   late String _sttLocaleId;
 
   EncoderBloc({
     required PlayerService player,
+    EncoderService? encoderService,
     SpeechService? speechService,
     int wpm = MorseTiming.defaultWpm,
     int frequencyHz = MorseTiming.defaultFrequencyHz,
     String sttLocaleId = 'en_US',
   })  : _player = player,
+        _service = encoderService ?? EncoderService(),
         _speech = speechService ?? SpeechService(),
         super(const EncoderState()) {
     _encoder = MorseEncoder(timing: MorseTiming(wpm: wpm));
@@ -36,6 +43,10 @@ class EncoderBloc extends Bloc<EncoderEvent, EncoderState> {
     on<EncoderSttStopRequested>(_onSttStopRequested);
     on<EncoderSttResult>(_onSttResult);
     on<EncoderSttCompleted>(_onSttCompleted);
+    on<EncoderSaveRequested>(_onSaveRequested);
+    on<EncoderSaveToPathRequested>(_onSaveToPathRequested);
+    on<EncoderShareRequested>(_onShareRequested);
+    on<_SaveCompleted>(_onSaveCompleted);
   }
 
   // ---------------------------------------------------------------------------
@@ -61,6 +72,7 @@ class EncoderBloc extends Bloc<EncoderEvent, EncoderState> {
       transliteratedText: result.transliterated,
       morseWritten: result.encoding.written,
       playback: PlaybackStatus.idle,
+      clearSavedPath: true, // stale file no longer matches the new text
     ));
   }
 
@@ -145,6 +157,58 @@ class EncoderBloc extends Bloc<EncoderEvent, EncoderState> {
   void _onSttCompleted(EncoderSttCompleted event, Emitter<EncoderState> emit) {
     if (state.sttStatus == SttStatus.listening) {
       emit(state.copyWith(sttStatus: SttStatus.idle));
+    }
+  }
+
+  // ── Save / share ─────────────────────────────────────────────────────────────
+
+  Future<void> _onSaveRequested(
+    EncoderSaveRequested event,
+    Emitter<EncoderState> emit,
+  ) async {
+    await _synthesizeAndSave(emit, (bytes) {
+      final filename = 'morse_${DateTime.now().millisecondsSinceEpoch}';
+      return _service.saveTempAudio(bytes, filename);
+    });
+  }
+
+  Future<void> _onSaveToPathRequested(
+    EncoderSaveToPathRequested event,
+    Emitter<EncoderState> emit,
+  ) async {
+    await _synthesizeAndSave(
+      emit,
+      (bytes) => _service.saveAudioToPath(bytes, event.path),
+    );
+  }
+
+  Future<void> _onShareRequested(
+    EncoderShareRequested event,
+    Emitter<EncoderState> emit,
+  ) async {
+    if (!state.canShare) return;
+    await _service.shareAudio(state.savedPath!);
+  }
+
+  void _onSaveCompleted(_SaveCompleted event, Emitter<EncoderState> emit) {
+    emit(state.copyWith(savedPath: event.path));
+  }
+
+  Future<void> _synthesizeAndSave(
+    Emitter<EncoderState> emit,
+    Future<String> Function(Uint8List bytes) doSave,
+  ) async {
+    if (!state.canSave) return;
+    final result = _process(state.inputText);
+    final bytes = MorseWavSynthesizer.synthesize(
+      result.encoding.tones,
+      _frequencyHz,
+    );
+    try {
+      final path = await doSave(bytes);
+      if (!isClosed) add(_SaveCompleted(path));
+    } catch (_) {
+      // Save failed silently — state unchanged.
     }
   }
 
