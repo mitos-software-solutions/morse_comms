@@ -1,0 +1,10 @@
+## MSIX + Winget (parked on branch feature/msix)
+- Awaiting SignPath.io OSS free tier approval (application sent 2026-04-11)
+- Once certificate is issued:
+  1. Add SignPath signing step to .github/workflows/release.yml (after dart run msix:create)
+  2. Re-enable MSIX artifact in the release job
+  3. Submit to winget (microsoft/winget-pkgs PR) pointing to the signed .msix
+  4. Merge feature/msix into develop
+
+## Store listings
+- Update Play Store badge URL in README.md once listing goes live
