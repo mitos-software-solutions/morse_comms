@@ -251,6 +251,106 @@ void main() {
   EncoderBloc encoderBloc(WidgetTester tester) =>
       tester.element(find.byType(FilledButton).first).read<EncoderBloc>();
 
+  // ── Save / share UI tests ───────────────────────────────────────────────────
+
+  group('save / share UI', () {
+    late SettingsCubit settingsCubit;
+    late _StubPlayerService player;
+
+    setUp(() async {
+      settingsCubit = await _makeSettingsCubit();
+      player = _StubPlayerService();
+    });
+
+    testWidgets('Save button is present and disabled when morse is empty',
+        (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      final saveBtn = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Save as WAV'),
+      );
+      expect(saveBtn.onPressed, isNull);
+    });
+
+    testWidgets('Save button becomes enabled after typing text', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'SOS');
+      await tester.pumpAndSettle();
+
+      final saveBtn = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Save as WAV'),
+      );
+      expect(saveBtn.onPressed, isNotNull);
+    });
+
+    testWidgets('Saved chip not visible in initial state', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.check_circle), findsNothing);
+      expect(find.byIcon(Icons.share), findsNothing);
+    });
+
+    testWidgets('Saved chip appears when savedPath is set', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      encoderBloc(tester).emit(const EncoderState(
+        morseWritten: '... --- ...',
+        savedPath: '/tmp/morse_123456789.wav',
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+      expect(find.byIcon(Icons.share), findsOneWidget);
+    });
+
+    testWidgets('Saved chip shows filename from path', (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      encoderBloc(tester).emit(const EncoderState(
+        morseWritten: '... --- ...',
+        savedPath: '/tmp/morse_987.wav',
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('morse_987.wav'), findsOneWidget);
+    });
+
+    testWidgets('Saved chip is hidden after text changes clear savedPath',
+        (tester) async {
+      await tester.pumpWidget(
+          _buildTestApp(settingsCubit: settingsCubit, player: player));
+      await tester.pumpAndSettle();
+
+      encoderBloc(tester).emit(const EncoderState(
+        morseWritten: '... --- ...',
+        savedPath: '/tmp/morse_123.wav',
+      ));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+
+      // Text change clears savedPath.
+      encoderBloc(tester).emit(const EncoderState(morseWritten: '...'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byIcon(Icons.check_circle), findsNothing);
+    });
+  });
+
   group('state-driven UI', () {
     late SettingsCubit settingsCubit;
     late _StubPlayerService player;

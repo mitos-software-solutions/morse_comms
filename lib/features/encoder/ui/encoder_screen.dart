@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../features/player/player_service.dart';
 import '../../../features/settings/bloc/settings_cubit.dart';
@@ -55,17 +57,42 @@ class _EncoderViewState extends State<_EncoderView> {
 
   @override
   Widget build(BuildContext context) {
-    // Sync text field when STT fills in text from the BLoC.
-    return BlocListener<EncoderBloc, EncoderState>(
-      listenWhen: (prev, cur) =>
-          prev.inputText != cur.inputText &&
-          cur.inputText != _controller.text,
-      listener: (context, state) {
-        _controller.text = state.inputText;
-        _controller.selection = TextSelection.fromPosition(
-          TextPosition(offset: state.inputText.length),
-        );
-      },
+    return MultiBlocListener(
+      listeners: [
+        // Sync text field when STT fills in text from the BLoC.
+        BlocListener<EncoderBloc, EncoderState>(
+          listenWhen: (prev, cur) =>
+              prev.inputText != cur.inputText &&
+              cur.inputText != _controller.text,
+          listener: (context, state) {
+            _controller.text = state.inputText;
+            _controller.selection = TextSelection.fromPosition(
+              TextPosition(offset: state.inputText.length),
+            );
+          },
+        ),
+        // React to a completed save: share sheet on mobile, SnackBar on desktop.
+        BlocListener<EncoderBloc, EncoderState>(
+          listenWhen: (prev, cur) =>
+              cur.savedPath != null && prev.savedPath != cur.savedPath,
+          listener: (context, state) async {
+            if (defaultTargetPlatform == TargetPlatform.android ||
+                defaultTargetPlatform == TargetPlatform.iOS) {
+              await Share.shareXFiles(
+                [XFile(state.savedPath!, mimeType: 'audio/wav')],
+                subject: 'Morse Audio',
+              );
+            } else {
+              final filename = state.savedPath!.split('/').last;
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Saved to $filename')),
+                );
+              }
+            }
+          },
+        ),
+      ],
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Morse Encoder'),
@@ -262,10 +289,97 @@ class _EncoderViewState extends State<_EncoderView> {
                   );
                 },
               ),
+
+              const SizedBox(height: 12),
+
+              // --- Save as WAV button + saved chip ---
+              BlocBuilder<EncoderBloc, EncoderState>(
+                buildWhen: (prev, cur) =>
+                    prev.canSave != cur.canSave ||
+                    prev.savedPath != cur.savedPath,
+                builder: (context, state) {
+                  Future<void> onSave() async {
+                    if (defaultTargetPlatform == TargetPlatform.windows ||
+                        defaultTargetPlatform == TargetPlatform.linux) {
+                      final timestamp = DateTime.now().millisecondsSinceEpoch;
+                      final dir = await getDownloadsDirectory() ??
+                          await getApplicationDocumentsDirectory();
+                      final path =
+                          '${dir.path}/morse_audio_$timestamp.wav';
+                      if (!context.mounted) return;
+                      context
+                          .read<EncoderBloc>()
+                          .add(EncoderSaveToPathRequested(path));
+                    } else {
+                      context
+                          .read<EncoderBloc>()
+                          .add(EncoderSaveRequested());
+                    }
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: state.canSave ? onSave : null,
+                        icon: const Icon(Icons.save_alt),
+                        label: const Text('Save as WAV'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor:
+                              Theme.of(context).colorScheme.secondary,
+                          foregroundColor:
+                              Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                      if (state.savedPath != null) ...[
+                        const SizedBox(height: 10),
+                        _SavedChip(
+                          path: state.savedPath!,
+                          onShare: () => context
+                              .read<EncoderBloc>()
+                              .add(EncoderShareRequested()),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Green chip shown after a successful save. Displays the filename and a
+/// share icon that reopens the platform share sheet.
+class _SavedChip extends StatelessWidget {
+  const _SavedChip({required this.path, required this.onShare});
+  final String path;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final filename = path.split('/').last;
+    return Row(
+      children: [
+        Icon(Icons.check_circle, size: 16, color: Colors.green.shade600),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            filename,
+            style: Theme.of(context).textTheme.bodySmall,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.share, size: 20),
+          tooltip: 'Share',
+          onPressed: onShare,
+        ),
+      ],
     );
   }
 }

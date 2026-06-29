@@ -3,8 +3,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:morse_comms/core/morse/morse_encoder.dart';
 import 'package:morse_comms/core/morse/morse_timing.dart';
 import 'package:morse_comms/features/encoder/bloc/encoder_bloc.dart';
+import 'package:morse_comms/features/encoder/data/encoder_service.dart';
 import 'package:morse_comms/features/encoder/data/speech_service.dart';
 import 'package:morse_comms/features/player/player_service.dart';
+
+// ---------------------------------------------------------------------------
+// Stub EncoderService — no file I/O or share sheet involved.
+// ---------------------------------------------------------------------------
+
+class _StubEncoderService extends EncoderService {
+  bool saveTempCalled = false;
+  bool saveToPathCalled = false;
+  bool shareCalled = false;
+  Uint8List? lastSavedBytes;
+  String? lastSharedPath;
+  String savePathToReturn = '/tmp/morse_test.wav';
+  bool shouldThrow = false;
+
+  @override
+  Future<String> saveTempAudio(Uint8List wavBytes, String filename) async {
+    if (shouldThrow) throw Exception('disk full');
+    saveTempCalled = true;
+    lastSavedBytes = wavBytes;
+    return savePathToReturn;
+  }
+
+  @override
+  Future<String> saveAudioToPath(Uint8List wavBytes, String path) async {
+    if (shouldThrow) throw Exception('disk full');
+    saveToPathCalled = true;
+    lastSavedBytes = wavBytes;
+    return path;
+  }
+
+  @override
+  Future<void> shareAudio(String path) async {
+    shareCalled = true;
+    lastSharedPath = path;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Stub PlayerService — no audio hardware involved.
@@ -78,12 +115,14 @@ class _StubSpeechService extends SpeechService {
 EncoderBloc _makeBloc({
   _StubPlayerService? player,
   _StubSpeechService? speech,
+  _StubEncoderService? service,
   int wpm = MorseTiming.defaultWpm,
   int frequencyHz = MorseTiming.defaultFrequencyHz,
   String sttLocaleId = 'en_US',
 }) {
   return EncoderBloc(
     player: player ?? _StubPlayerService(),
+    encoderService: service ?? _StubEncoderService(),
     speechService: speech ?? _StubSpeechService(),
     wpm: wpm,
     frequencyHz: frequencyHz,
@@ -479,6 +518,226 @@ void main() {
       bloc.add(EncoderTextChanged('K'));
       await Future.delayed(Duration.zero);
       expect(bloc.state.canPlay, isTrue);
+      await bloc.close();
+    });
+  });
+
+  // ── Save / share ─────────────────────────────────────────────────────────────
+
+  group('EncoderBloc — EncoderState.canSave / canShare', () {
+    test('canSave is false when morseWritten is empty', () {
+      final bloc = _makeBloc();
+      expect(bloc.state.canSave, isFalse);
+      bloc.close();
+    });
+
+    test('canSave is true when morseWritten is non-empty', () async {
+      final bloc = _makeBloc();
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+      expect(bloc.state.canSave, isTrue);
+      await bloc.close();
+    });
+
+    test('canSave is true even while playing', () async {
+      final bloc = _makeBloc();
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+      bloc.emit(bloc.state.copyWith(playback: PlaybackStatus.playing));
+      expect(bloc.state.canSave, isTrue);
+      await bloc.close();
+    });
+
+    test('canShare is false when savedPath is null', () {
+      final bloc = _makeBloc();
+      expect(bloc.state.canShare, isFalse);
+      bloc.close();
+    });
+
+    test('canShare is true when savedPath is non-null', () {
+      final bloc = _makeBloc();
+      bloc.emit(bloc.state.copyWith(savedPath: '/tmp/test.wav'));
+      expect(bloc.state.canShare, isTrue);
+      bloc.close();
+    });
+
+    test('copyWith(clearSavedPath: true) sets savedPath to null', () {
+      final bloc = _makeBloc();
+      bloc.emit(bloc.state.copyWith(savedPath: '/tmp/test.wav'));
+      bloc.emit(bloc.state.copyWith(clearSavedPath: true));
+      expect(bloc.state.savedPath, isNull);
+      bloc.close();
+    });
+  });
+
+  group('EncoderBloc — EncoderSaveRequested', () {
+    test('no state change when canSave is false (empty morse)', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+
+      expect(service.saveTempCalled, isFalse);
+      expect(bloc.state.savedPath, isNull);
+      await bloc.close();
+    });
+
+    test('savedPath is set after successful save', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+
+      expect(service.saveTempCalled, isTrue);
+      expect(bloc.state.savedPath, service.savePathToReturn);
+      await bloc.close();
+    });
+
+    test('savedPath ends with .wav', () async {
+      final service = _StubEncoderService()
+        ..savePathToReturn = '/tmp/morse_123456789.wav';
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('K'));
+      await Future.delayed(Duration.zero);
+
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+
+      expect(bloc.state.savedPath, endsWith('.wav'));
+      await bloc.close();
+    });
+
+    test('synthesizes valid WAV bytes (RIFF magic preserved)', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+
+      final bytes = service.lastSavedBytes!;
+      expect(bytes[0], 0x52); // R
+      expect(bytes[1], 0x49); // I
+      expect(bytes[2], 0x46); // F
+      expect(bytes[3], 0x46); // F
+      await bloc.close();
+    });
+
+    test('canShare becomes true after save', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+
+      expect(bloc.state.canShare, isTrue);
+      await bloc.close();
+    });
+
+    test('playback status is unchanged by save', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+      bloc.emit(bloc.state.copyWith(playback: PlaybackStatus.playing));
+
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+
+      expect(bloc.state.playback, PlaybackStatus.playing);
+      await bloc.close();
+    });
+
+    test('service failure leaves savedPath null (no crash)', () async {
+      final service = _StubEncoderService()..shouldThrow = true;
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+
+      expect(bloc.state.savedPath, isNull);
+      await bloc.close();
+    });
+
+    test('new EncoderTextChanged after save clears savedPath', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+      expect(bloc.state.savedPath, isNotNull);
+
+      bloc.add(EncoderTextChanged('HELLO'));
+      await Future.delayed(Duration.zero);
+
+      expect(bloc.state.savedPath, isNull);
+      await bloc.close();
+    });
+  });
+
+  group('EncoderBloc — EncoderSaveToPathRequested', () {
+    test('saves to the explicit path provided by the screen', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+
+      const desktopPath = '/home/user/Downloads/morse_audio_123.wav';
+      bloc.add(EncoderSaveToPathRequested(desktopPath));
+      await Future.delayed(Duration.zero);
+
+      expect(service.saveToPathCalled, isTrue);
+      expect(bloc.state.savedPath, desktopPath);
+      await bloc.close();
+    });
+
+    test('no state change when canSave is false', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+
+      bloc.add(EncoderSaveToPathRequested('/tmp/test.wav'));
+      await Future.delayed(Duration.zero);
+
+      expect(service.saveToPathCalled, isFalse);
+      await bloc.close();
+    });
+  });
+
+  group('EncoderBloc — EncoderShareRequested', () {
+    test('calls service.shareAudio with savedPath', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+      bloc.add(EncoderTextChanged('SOS'));
+      await Future.delayed(Duration.zero);
+      bloc.add(EncoderSaveRequested());
+      await Future.delayed(Duration.zero);
+
+      bloc.add(EncoderShareRequested());
+      await Future.delayed(Duration.zero);
+
+      expect(service.shareCalled, isTrue);
+      expect(service.lastSharedPath, service.savePathToReturn);
+      await bloc.close();
+    });
+
+    test('is a no-op when savedPath is null', () async {
+      final service = _StubEncoderService();
+      final bloc = _makeBloc(service: service);
+
+      bloc.add(EncoderShareRequested());
+      await Future.delayed(Duration.zero);
+
+      expect(service.shareCalled, isFalse);
       await bloc.close();
     });
   });

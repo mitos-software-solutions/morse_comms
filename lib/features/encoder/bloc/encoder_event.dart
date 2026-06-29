@@ -41,3 +41,24 @@ final class EncoderSttResult extends EncoderEvent {
 
 /// Internal — fired when the STT session ends naturally (silence / timeout).
 final class EncoderSttCompleted extends EncoderEvent {}
+
+/// User tapped the Save button to export the encoded Morse as a WAV file.
+/// Used on mobile: the bloc writes to a temp directory then the screen opens
+/// the share sheet via a [BlocListener] when [EncoderState.savedPath] appears.
+final class EncoderSaveRequested extends EncoderEvent {}
+
+/// Desktop variant: the screen has already resolved the Downloads directory
+/// and provides the full [path] (including filename and .wav extension).
+final class EncoderSaveToPathRequested extends EncoderEvent {
+  final String path;
+  EncoderSaveToPathRequested(this.path);
+}
+
+/// User tapped the Share icon on the saved-file chip to re-open the share sheet.
+final class EncoderShareRequested extends EncoderEvent {}
+
+/// Internal — WAV was written to disk successfully; carries the full path.
+final class _SaveCompleted extends EncoderEvent {
+  final String path;
+  _SaveCompleted(this.path);
+}
