@@ -24,4 +24,3 @@
 
 - [ ] `pubspec.yaml` version updated (semver + build number)
 - [ ] `CHANGELOG.md` updated
-- [ ] F-Droid recipe and `fdroiddata` yml updated (if applicable)

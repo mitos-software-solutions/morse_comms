@@ -62,11 +62,9 @@ flutter test
 
 When `develop` is ready to ship:
 
-1. Bump the version in **4 places** (see the version bump checklist in `.context/`):
+1. Bump the version in **2 places** (see the version bump checklist in `.context/`):
    - `pubspec.yaml` — `version: X.Y.Z+N`
    - `CHANGELOG.md`
-   - F-Droid recipe
-   - `fdroiddata` yml
 2. Open a PR from `develop` → `main`.
 3. On merge, the `release.yml` workflow automatically:
    - Runs tests
